@@ -9,3 +9,6 @@ api_key.txt
 .DS_Store
 Thumbs.db
 node_modules/
+
+# видео обучалки — тяжёлое, лежит локально
+tutorial/
