@@ -12,7 +12,27 @@ function onOpen(e) {
     .addItem('Картинка на слайд…', 'showImageSidebar')
     .addItem('Стиль презентации…', 'showStyleSidebar')
     .addItem('Собрать презентацию…', 'showDeckSidebar')
+    .addSeparator()
+    .addItem('Убрать все картинки из презентации…', 'menuStripImages')
     .addToUi();
+}
+
+/** Снять все картинки с презентации — чтобы перерисовать её заново. */
+function menuStripImages() {
+  var ui = SlidesApp.getUi();
+  var count = slidesCountImages();
+  if (!count) {
+    ui.alert('AI Agent GenosAI', 'Картинок в презентации не нашёл.', ui.ButtonSet.OK);
+    return;
+  }
+  var answer = ui.alert('AI Agent GenosAI',
+    'Убрать все картинки? Найдено: ' + count + '.\n\nТекст, плашки и разметка останутся на местах. ' +
+    'Отменить это можно только откатом версии файла (Файл → История версий).',
+    ui.ButtonSet.YES_NO);
+  if (answer !== ui.Button.YES) return;
+
+  var removed = slidesStripImages();
+  ui.alert('AI Agent GenosAI', 'Убрано картинок: ' + removed + '.', ui.ButtonSet.OK);
 }
 
 function onInstall(e) {

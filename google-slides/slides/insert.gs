@@ -162,6 +162,42 @@ function slidesReplaceImage(box, url) {
   return { slideId: box.slideId, imageId: image.getObjectId() };
 }
 
+/** Сколько картинок в презентации (включая те, что внутри групп). */
+function slidesCountImages() {
+  var total = 0;
+  SlidesApp.getActivePresentation().getSlides().forEach(function (slide) {
+    total += slidesCollectImages_(slide.getPageElements()).length;
+  });
+  return total;
+}
+
+/**
+ * Убрать все картинки из презентации: текст, плашки и разметка остаются.
+ * Нужно, когда готовую презентацию хочется перерисовать заново.
+ */
+function slidesStripImages() {
+  var removed = 0;
+  SlidesApp.getActivePresentation().getSlides().forEach(function (slide) {
+    slidesCollectImages_(slide.getPageElements()).forEach(function (img) {
+      try { img.remove(); removed++; } catch (e) { /* уже удалена вместе с группой */ }
+    });
+  });
+  return removed;
+}
+
+function slidesCollectImages_(elements) {
+  var found = [];
+  elements.forEach(function (el) {
+    var type = el.getPageElementType();
+    if (type === SlidesApp.PageElementType.IMAGE) {
+      found.push(el.asImage());
+    } else if (type === SlidesApp.PageElementType.GROUP) {
+      found = found.concat(slidesCollectImages_(el.asGroup().getChildren()));
+    }
+  });
+  return found;
+}
+
 /** Весь текст текущего слайда — исходник для промпта «нарисуй к этому слайду». */
 function slidesCurrentText() {
   var slide = slidesCurrent_();
