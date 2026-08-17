@@ -112,6 +112,21 @@ function uiPollTask(taskId) {
 }
 
 /**
+ * Закрепить слайд ДО генерации: пока картинка рисуется, можно уйти на другой слайд
+ * или запустить ещё одну — каждая ляжет туда, откуда её запустили.
+ * opts: {target: 'current'|'new', placement}
+ * → slideId
+ */
+function uiPrepareTarget(opts) {
+  opts = opts || {};
+  if (opts.target === 'new') {
+    var kind = (opts.placement === 'full' || opts.placement === 'center') ? 'blank' : 'titleBody';
+    return slidesAppendSlide_(kind).getObjectId();
+  }
+  return slidesCurrent_().getObjectId();
+}
+
+/**
  * Вставить готовую картинку на слайд.
  * opts: {slideId?, target:'current'|'new', placement, title?}
  */

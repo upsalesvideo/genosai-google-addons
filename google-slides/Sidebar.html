@@ -69,6 +69,17 @@
     .stnow img { width: 52px; height: 30px; object-fit: cover; border-radius: 4px; }
     .stnow div { font-size: 11px; }
 
+    .jobs { margin-top: 10px; }
+    .job { display: flex; gap: 6px; align-items: baseline; font-size: 11px; padding: 4px 6px;
+      border-radius: 6px; background: var(--bg); margin-top: 4px; }
+    .job .n { color: var(--muted); }
+    .job .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .job .stt { white-space: nowrap; }
+    .job.ok { background: #e8f5ec; cursor: zoom-in; }
+    .job.ok .stt { color: #137333; }
+    .job.err { background: #fce8e6; }
+    .job.err .stt { color: #c5221f; }
+
     .bar { height: 4px; background: var(--bg); border-radius: 3px; margin-top: 10px; overflow: hidden; display: none; }
     .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
 
@@ -169,6 +180,8 @@
       </div>
 
       <button class="act" id="go" disabled>Создать и вставить</button>
+      <div class="jobs" id="jobs"></div>
+      <div class="links" id="jobsBar" style="display:none"><a id="jobsClear">Очистить список</a></div>
       <div class="status" id="st-image"></div>
 
       <div class="preview" id="preview">
@@ -650,15 +663,45 @@
     fillSelect(el('res'), m && m.resolutions, (m && m.resolutionDefault) || DEFAULTS.resolution, 'по умолчанию');
   }
 
+  /**
+   * Очередь генераций: кнопка освобождается, как только Genosai принял задачу.
+   * Слайд закрепляется в момент запуска, поэтому можно уйти на другой слайд
+   * или поставить вторую картинку — каждая ляжет туда, откуда её запустили.
+   */
+  var JOBS = [], jobSeq = 0;
+
+  function freeButton() {
+    el('go').disabled = false;
+    el('go').textContent = 'Создать и вставить';
+  }
+
+  function renderJobs() {
+    var box = el('jobs');
+    box.innerHTML = '';
+    JOBS.forEach(function (j) {
+      var row = document.createElement('div');
+      row.className = 'job' + (j.state === 'ok' ? ' ok' : j.state === 'err' ? ' err' : '');
+      var n = document.createElement('span'); n.className = 'n'; n.textContent = '#' + j.n;
+      var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = j.label;
+      var st = document.createElement('span'); st.className = 'stt'; st.textContent = j.text;
+      row.appendChild(n); row.appendChild(nm); row.appendChild(st);
+      if (j.url) row.onclick = function () { showImage(j.url); };
+      box.appendChild(row);
+    });
+    el('jobsBar').style.display = JOBS.length ? 'block' : 'none';
+  }
+
+  el('jobsClear').onclick = function () {
+    JOBS = JOBS.filter(function (j) { return j.state === 'run'; });
+    renderJobs();
+  };
+
   el('go').onclick = function () {
     var prompt = el('prompt').value.trim();
     if (!prompt) { say('image', 'Напиши, что нарисовать.', 'err'); return; }
-    el('go').disabled = true; el('go').textContent = 'Генерирую…';
-    el('preview').style.display = 'none';
-    say('image', 'Отправляю задачу…');
 
     var m = modelById(el('model').value);
-    generateImage({
+    var cfg = {
       model: el('model').value,
       prompt: prompt,
       aspectRatio: el('ar').value,
@@ -667,41 +710,93 @@
       useSelection: el('useSel').checked,
       referenceUrls: refsUrls(IMAGE_REFS),
       maxRefs: (m && m.maxRefs) || 1
-    },
-    function (t) { say('image', 'Рисую' + new Array((t % 4) + 2).join('.')); },
-    function (url) {
-      lastImageUrl = url;
-      el('previewImg').src = url;
-      el('previewImg').onclick = function () { showImage(url); };
-      el('preview').style.display = 'block';
-      say('image', 'Готово, кладу на слайд…');
-      insertLastImage();
-    },
-    function (err) {
-      el('go').disabled = false; el('go').textContent = 'Создать и вставить';
-      say('image', (err && err.message) || String(err), 'err');
-    });
+    };
+    var placement = el('placement').value;
+    var title = el('bandTitle').value.trim();
+
+    el('go').disabled = true; el('go').textContent = 'Отправляю…';
+    say('image', '');
+
+    google.script.run
+      .withSuccessHandler(function (slideId) {
+        startJob(cfg, { slideId: slideId, placement: placement, title: title });
+      })
+      .withFailureHandler(function (err) {
+        freeButton();
+        say('image', (err && err.message) || String(err), 'err');
+      })
+      .uiPrepareTarget({ target: el('target').value, placement: placement });
   };
 
-  function insertLastImage() {
-    if (!lastImageUrl) return;
+  function startJob(cfg, dest) {
+    var job = {
+      n: ++jobSeq,
+      label: cfg.prompt.length > 30 ? cfg.prompt.slice(0, 30) + '…' : cfg.prompt,
+      state: 'run',
+      text: 'отправляю…'
+    };
+    JOBS.push(job);
+    renderJobs();
+
+    google.script.run
+      .withSuccessHandler(function (taskId) {
+        freeButton();          // ← задача принята, можно запускать следующую
+        job.text = 'рисую…';
+        renderJobs();
+        pollImage(taskId, 0,
+          function (t) { job.text = 'рисую' + new Array((t % 4) + 2).join('.'); renderJobs(); },
+          function (url) { placeJob(job, url, dest); },
+          function (err) { job.state = 'err'; job.text = (err && err.message) || String(err); renderJobs(); });
+      })
+      .withFailureHandler(function (err) {
+        freeButton();
+        job.state = 'err';
+        job.text = (err && err.message) || String(err);
+        renderJobs();
+      })
+      .uiStartGeneration(cfg);
+  }
+
+  function placeJob(job, url, dest) {
+    job.text = 'кладу на слайд…';
+    renderJobs();
+
+    lastImageUrl = url;
+    el('previewImg').src = url;
+    el('previewImg').onclick = function () { showImage(url); };
+    el('preview').style.display = 'block';
+
     google.script.run
       .withSuccessHandler(function () {
-        el('go').disabled = false; el('go').textContent = 'Создать и вставить';
-        say('image', 'Картинка на слайде.', 'ok');
+        job.state = 'ok'; job.text = 'готово'; job.url = url;
+        renderJobs();
         refreshBalance();
       })
       .withFailureHandler(function (err) {
-        el('go').disabled = false; el('go').textContent = 'Создать и вставить';
-        say('image', (err && err.message) || String(err), 'err');
+        job.state = 'err'; job.text = (err && err.message) || String(err);
+        renderJobs();
       })
-      .uiInsertImage(lastImageUrl, {
-        target: el('target').value,
-        placement: el('placement').value,
-        title: el('bandTitle').value.trim()
-      });
+      .uiInsertImage(url, dest);
   }
-  el('again').onclick = insertLastImage;
+
+  /** «Вставить ещё раз» — по текущим настройкам «куда» и «раскладка». */
+  el('again').onclick = function () {
+    if (!lastImageUrl) return;
+    var placement = el('placement').value;
+    var title = el('bandTitle').value.trim();
+    var url = lastImageUrl;
+    var job = { n: ++jobSeq, label: 'повторная вставка', state: 'run', text: 'кладу на слайд…' };
+    JOBS.push(job); renderJobs();
+
+    google.script.run
+      .withSuccessHandler(function (slideId) {
+        placeJob(job, url, { slideId: slideId, placement: placement, title: title });
+      })
+      .withFailureHandler(function (err) {
+        job.state = 'err'; job.text = (err && err.message) || String(err); renderJobs();
+      })
+      .uiPrepareTarget({ target: el('target').value, placement: placement });
+  };
 
   // ---------- вкладка «Презентация»: план ----------
   function progress(done, total) {
