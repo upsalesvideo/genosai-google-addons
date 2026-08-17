@@ -30,6 +30,32 @@
 4. Запустить `onOpen`, выдать разрешения, перезагрузить документ.
 5. Сайдбар → **⚙** → свой ключ Genosai.
 
+## Обновление без копипаста (clasp)
+
+Чтобы не переносить файлы руками, есть [clasp](https://github.com/google/clasp) — CLI для Apps Script.
+Разовая настройка:
+
+```bat
+npm i -g @google/clasp
+clasp login
+```
+
+Плюс один раз включить Apps Script API: https://script.google.com/home/usersettings → «Google Apps Script API» → On.
+
+Дальше в папке нужного дополнения:
+
+```bat
+clasp-init.bat ВАШ_SCRIPT_ID
+push.bat
+```
+
+`SCRIPT_ID` берётся в редакторе: **⚙ Настройки проекта → Идентификатор скрипта**.
+`clasp-init.bat` создаёт локальный `.clasp.json` (он в `.gitignore` — у каждого свой),
+`push.bat` заливает проект в Google, `pull.bat` тянет обратно, если правили в браузере.
+
+Заливаются только рабочие файлы: `appsscript.json`, `Code.gs`, `Sidebar.html` и скрипты по папкам.
+README, `assets/` и сами `.bat` остаются локально — за это отвечает `.claspignore`.
+
 ## Стили презентаций
 
 Четыре заводских стиля выбираются картинкой — одна сцена, разная подача:
