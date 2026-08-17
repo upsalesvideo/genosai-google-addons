@@ -8,10 +8,10 @@
     .muted { color: var(--muted); font-size: 11px; }
     .hide { display: none !important; }
 
-    .head { display: flex; align-items: center; gap: 8px; }
-    .brand { font-weight: 700; font-size: 14px; flex: 1; }
+    /* Название агента уже есть в шапке самой панели Google — здесь только баланс и шестерёнка */
+    .head { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-height: 26px; }
     .icon { border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer;
-      width: 26px; height: 26px; font-size: 14px; line-height: 1; padding: 0; }
+      width: 26px; height: 26px; font-size: 14px; line-height: 1; padding: 0; flex: none; }
     .icon:hover { border-color: var(--accent); }
 
     .tabs { display: flex; gap: 2px; background: var(--bg); border-radius: 8px; padding: 3px; margin: 10px 0 4px; }
@@ -27,8 +27,11 @@
       border: 1px solid var(--line); border-radius: 6px; font: inherit; background: #fff;
     }
     textarea { min-height: 80px; resize: vertical; }
-    .row { display: flex; gap: 8px; }
-    .row > div { flex: 1; }
+    /* колонки равняем по низу: подпись может занять две строки, а поля всё равно встанут в линию */
+    .row { display: flex; gap: 8px; align-items: flex-end; }
+    .row > div { flex: 1; min-width: 0; }
+    .row label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    select { text-overflow: ellipsis; }
     .check { display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; font-weight: 400; }
     .check input { margin-top: 2px; }
 
@@ -93,7 +96,6 @@
 </head>
 <body>
   <div class="head">
-    <div class="brand">🤖 AI Agent GenosAI</div>
     <span class="muted" id="balance"></span>
     <button class="icon" id="gear" title="Настройки">⚙</button>
   </div>

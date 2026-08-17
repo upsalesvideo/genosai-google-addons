@@ -8,10 +8,10 @@
     .muted { color: var(--muted); font-size: 11px; }
     .hide { display: none !important; }
 
-    .head { display: flex; align-items: center; gap: 8px; }
-    .brand { font-weight: 700; font-size: 14px; flex: 1; }
+    /* Название агента уже есть в шапке самой панели Google — здесь только баланс и шестерёнка */
+    .head { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-height: 26px; }
     .icon { border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer;
-      width: 26px; height: 26px; font-size: 14px; line-height: 1; padding: 0; }
+      width: 26px; height: 26px; font-size: 14px; line-height: 1; padding: 0; flex: none; }
     .icon:hover { border-color: var(--accent); }
 
     .tabs { display: flex; gap: 2px; background: var(--bg); border-radius: 8px; padding: 3px; margin: 10px 0 4px; }
@@ -27,8 +27,14 @@
       border: 1px solid var(--line); border-radius: 6px; font: inherit; background: #fff;
     }
     textarea { min-height: 80px; resize: vertical; }
-    .row { display: flex; gap: 8px; }
-    .row > div { flex: 1; }
+    /* колонки равняем по низу: подпись может занять две строки, а поля всё равно встанут в линию */
+    .row { display: flex; gap: 8px; align-items: flex-end; }
+    .row > div { flex: 1; min-width: 0; }
+    .row label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    select { text-overflow: ellipsis; }
+    /* ряд кнопок: одинаковая высота, даже если подпись у одной переносится */
+    .row.btns { align-items: stretch; }
+    .row.btns button { height: 100%; }
     .check { display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; font-weight: 400; }
     .check input { margin-top: 2px; }
 
@@ -57,11 +63,14 @@
     .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; cursor: zoom-in; }
     .chip b { cursor: pointer; color: var(--muted); font-weight: 400; }
 
-    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
-    .card { border: 2px solid var(--line); border-radius: 8px; overflow: hidden; cursor: pointer; background: #fff; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; align-items: stretch; }
+    .card { display: flex; flex-direction: column; border: 2px solid var(--line); border-radius: 8px;
+      overflow: hidden; cursor: pointer; background: #fff; }
     .card.on { border-color: var(--accent); }
     .card img { width: 100%; display: block; aspect-ratio: 16/9; object-fit: cover; background: var(--bg); }
-    .card .nm { padding: 4px 6px; font-size: 11px; text-align: center; }
+    /* подпись в две строки у всех карточек — иначе соседние карточки разной высоты и сетка ломается */
+    .card .nm { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center;
+      padding: 4px 6px; font-size: 11px; line-height: 1.25; min-height: 2.9em; }
     .card .none { display: flex; align-items: center; justify-content: center; aspect-ratio: 16/9;
       background: repeating-linear-gradient(45deg, #f0eefc, #f0eefc 6px, #fff 6px, #fff 12px); color: var(--muted); font-size: 11px; }
 
@@ -114,7 +123,6 @@
 </head>
 <body>
   <div class="head">
-    <div class="brand">🤖 AI Agent GenosAI</div>
     <span class="muted" id="balance"></span>
     <button class="icon" id="gear" title="Настройки">⚙</button>
   </div>
@@ -152,7 +160,7 @@
 
       <label for="prompt">Что нарисовать</label>
       <textarea id="prompt" placeholder="Например: команда обсуждает график продаж у большого окна"></textarea>
-      <div class="row">
+      <div class="row btns">
         <div><button class="sec mini" id="enhance">✨ Улучшить промпт</button></div>
         <div><button class="sec mini" id="fromSlide">По тексту слайда</button></div>
       </div>
@@ -161,24 +169,24 @@
         <div>
           <label for="target">Куда</label>
           <select id="target">
-            <option value="current">На текущий слайд</option>
-            <option value="new">На новый слайд</option>
+            <option value="current">Текущий слайд</option>
+            <option value="new">Новый слайд</option>
           </select>
         </div>
         <div>
           <label for="placement">Раскладка</label>
           <select id="placement">
-            <option value="full">На весь слайд</option>
+            <option value="full">Весь слайд</option>
             <option value="right">Справа</option>
             <option value="left">Слева</option>
-            <option value="center">Вписать по центру</option>
+            <option value="center">По центру</option>
           </select>
         </div>
       </div>
 
       <div class="row">
         <div>
-          <label for="ar">Формат <span class="muted" id="arHint"></span></label>
+          <label for="ar">Формат</label>
           <select id="ar"></select>
         </div>
         <div>
@@ -186,9 +194,10 @@
           <select id="res"></select>
         </div>
       </div>
+      <div class="muted" id="arHint"></div>
 
-      <label for="bandTitle">Заголовок плашкой <span class="muted">— для «на весь слайд»</span></label>
-      <input type="text" id="bandTitle" placeholder="можно оставить пустым">
+      <label for="bandTitle">Заголовок плашкой</label>
+      <input type="text" id="bandTitle" placeholder="только для раскладки «весь слайд»">
 
       <div id="refBox">
         <label>Референс <span class="muted" id="refHint"></span></label>
@@ -199,9 +208,9 @@
       </div>
 
       <button class="act" id="go" disabled>Создать и вставить</button>
-      <div class="row">
+      <div class="row btns">
         <div><button class="sec mini" id="go3">Ещё 3 варианта</button></div>
-        <div><button class="sec mini" id="redraw">Перерисовать выделенную</button></div>
+        <div><button class="sec mini" id="redraw" title="Перерисовать выделенную на слайде картинку">Перерисовать</button></div>
       </div>
 
       <div class="jobs" id="jobs"></div>
@@ -240,7 +249,7 @@
         <div>
           <label for="stPlacement">Раскладка</label>
           <select id="stPlacement">
-            <option value="full">На весь слайд</option>
+            <option value="full">Весь слайд</option>
             <option value="right">Справа</option>
             <option value="left">Слева</option>
             <option value="center">По центру</option>
