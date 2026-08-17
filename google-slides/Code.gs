@@ -4,11 +4,11 @@
  * Стиль: style/store.gs. Сборка презентации: deck/plan.gs.
  */
 
-var SIDEBAR_TITLE = '🤖 ИИ агент Гено-Сай';
+var SIDEBAR_TITLE = '🤖 AI Agent GenosAI';
 
 function onOpen(e) {
   SlidesApp.getUi()
-    .createMenu('🤖 Гено-Сай')
+    .createMenu('🤖 AI Agent GenosAI')
     .addItem('Картинка на слайд…', 'showImageSidebar')
     .addItem('Стиль презентации…', 'showStyleSidebar')
     .addItem('Собрать презентацию…', 'showDeckSidebar')

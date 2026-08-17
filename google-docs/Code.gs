@@ -3,11 +3,11 @@
  * Обращение к API вынесено в файл genosai/service.gs.
  */
 
-var SIDEBAR_TITLE = '🤖 ИИ агент Гено-Сай';
+var SIDEBAR_TITLE = '🤖 AI Agent GenosAI';
 
 function onOpen(e) {
   DocumentApp.getUi()
-    .createMenu('🤖 Гено-Сай')
+    .createMenu('🤖 AI Agent GenosAI')
     .addItem('Картинка…', 'showImageSidebar')
     .addItem('Текст ИИ…', 'showTextSidebar')
     .addItem('Шаблоны…', 'showTemplatesSidebar')
