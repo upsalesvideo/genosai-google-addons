@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    :root { --accent: #6c3bff; --line: #e3e3ec; --muted: #6b7280; --bg: #f7f7fb; }
+    body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #202124; margin: 0; padding: 10px 12px 24px; }
+    .muted { color: var(--muted); font-size: 11px; }
+    .hide { display: none !important; }
+
+    .head { display: flex; align-items: center; gap: 8px; }
+    .brand { font-weight: 700; font-size: 14px; flex: 1; }
+    .icon { border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer;
+      width: 26px; height: 26px; font-size: 14px; line-height: 1; padding: 0; }
+    .icon:hover { border-color: var(--accent); }
+
+    .tabs { display: flex; gap: 2px; background: var(--bg); border-radius: 8px; padding: 3px; margin: 10px 0 4px; }
+    .tabs button { flex: 1; padding: 6px 4px; border: 0; border-radius: 6px; background: transparent;
+      font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; margin: 0; }
+    .tabs button.on { background: #fff; color: #202124; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+    .pane { display: none; }
+    .pane.on { display: block; }
+
+    label { display: block; margin: 12px 0 4px; font-weight: 500; }
+    select, textarea, input[type=text], input[type=number] {
+      width: 100%; box-sizing: border-box; padding: 6px 8px;
+      border: 1px solid var(--line); border-radius: 6px; font: inherit; background: #fff;
+    }
+    textarea { min-height: 80px; resize: vertical; }
+    .row { display: flex; gap: 8px; }
+    .row > div { flex: 1; }
+    .check { display: flex; align-items: flex-start; gap: 6px; margin-top: 10px; font-weight: 400; }
+    .check input { margin-top: 2px; }
+
+    button.act, .filebtn, button.sec {
+      display: block; width: 100%; box-sizing: border-box; text-align: center;
+      padding: 9px 12px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; margin-top: 10px;
+    }
+    button.act { border: 0; background: var(--accent); color: #fff; }
+    button.act:disabled { background: #c3c0d6; cursor: default; }
+    button.sec, .filebtn { border: 1px solid var(--accent); background: #fff; color: var(--accent); font-weight: 500; }
+    .filebtn:hover, button.sec:hover { background: #f5f2ff; }
+    .links { margin-top: 10px; font-size: 11px; }
+    .links a { color: var(--accent); cursor: pointer; margin-right: 10px; }
+
+    .status { margin-top: 12px; min-height: 16px; font-size: 12px; white-space: pre-wrap; }
+    .status.err { color: #c5221f; }
+    .status.ok { color: #137333; }
+
+    .preview { margin-top: 10px; display: none; }
+    .preview img { width: 100%; border-radius: 6px; border: 1px solid var(--line); cursor: zoom-in; }
+    .out { margin-top: 10px; display: none; max-height: 180px; overflow: auto; background: var(--bg);
+      border: 1px solid var(--line); border-radius: 6px; padding: 8px; white-space: pre-wrap; font-size: 12px; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip { display: flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line);
+      border-radius: 20px; padding: 3px 8px 3px 3px; font-size: 11px; max-width: 100%; }
+    .chip img { width: 24px; height: 24px; object-fit: cover; border-radius: 50%; cursor: zoom-in; }
+    .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; cursor: zoom-in; }
+    .chip b { cursor: pointer; color: var(--muted); font-weight: 400; }
+
+    fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 14px 0 0; padding: 4px 10px 12px; }
+    legend { font-size: 11px; color: var(--muted); padding: 0 4px; }
+
+    .lb { position: fixed; inset: 0; background: rgba(16,16,20,.92); display: none; flex-direction: column;
+      align-items: center; justify-content: center; padding: 12px; z-index: 50; }
+    .lb.on { display: flex; }
+    .lb img { max-width: 100%; max-height: 78%; border-radius: 6px; }
+    .lb .bar2 { display: flex; gap: 12px; align-items: center; margin-top: 10px; }
+    .lb a { color: #fff; font-size: 11px; }
+    .lb b { color: #fff; cursor: pointer; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <div class="head">
+    <div class="brand">🤖 Гено-Сай</div>
+    <span class="muted" id="balance"></span>
+    <button class="icon" id="gear" title="Настройки">⚙</button>
+  </div>
+
+  <!-- ================= НАСТРОЙКИ ================= -->
+  <div id="settings" class="hide">
+    <label for="apiKey">API-ключ Genosai</label>
+    <input type="text" id="apiKey" placeholder="sdk_live_…">
+    <div class="muted" id="keyState"></div>
+    <button class="act" id="saveKey">Сохранить ключ</button>
+    <button class="sec" id="checkBalance">Проверить кредиты</button>
+    <div class="status" id="st-settings"></div>
+    <button class="sec" id="closeSettings">Закрыть настройки</button>
+    <div class="muted" style="margin-top:10px">
+      Ключ хранится в вашем личном профиле Google и не виден другим соавторам файла.
+      Взять ключ: genosai.io → раздел API.
+    </div>
+  </div>
+
+  <div id="main" class="hide">
+    <div class="tabs">
+      <button data-tab="image" class="on">Картинка</button>
+      <button data-tab="text">Текст</button>
+      <button data-tab="tpl">Шаблоны</button>
+    </div>
+
+    <!-- ================= КАРТИНКА ================= -->
+    <div class="pane on" id="pane-image">
+      <label for="model">Модель</label>
+      <select id="model" disabled></select>
+
+      <label for="prompt">Что нарисовать</label>
+      <textarea id="prompt" placeholder="Минималистичная иллюстрация: рабочий стол с ноутбуком, мягкий свет, пастельные тона"></textarea>
+
+      <div class="row">
+        <div>
+          <label for="ar">Формат</label>
+          <select id="ar"></select>
+        </div>
+        <div>
+          <label for="res">Качество</label>
+          <select id="res"></select>
+        </div>
+      </div>
+
+      <label for="width">Ширина в документе</label>
+      <select id="width">
+        <option value="100">Во всю ширину страницы</option>
+        <option value="75">75 %</option>
+        <option value="50">50 %</option>
+        <option value="0">Оригинальный размер</option>
+      </select>
+
+      <label class="check"><input type="checkbox" id="caption"> Подписать картинку промптом</label>
+
+      <div id="refBox">
+        <label>Референс <span class="muted" id="refHint"></span></label>
+        <label class="filebtn" for="refFile">＋ Добавить референс</label>
+        <input type="file" id="refFile" class="hide" accept="image/*" multiple>
+        <div class="chips" id="refList"></div>
+        <label class="check"><input type="checkbox" id="useSel"> Плюс картинка, выделенная в документе</label>
+      </div>
+
+      <button class="act" id="go" disabled>Создать и вставить</button>
+      <div class="status" id="st-image"></div>
+
+      <div class="preview" id="preview">
+        <img id="previewImg" alt="">
+        <button class="sec" id="again">Вставить ещё раз</button>
+      </div>
+    </div>
+
+    <!-- ================= ТЕКСТ ================= -->
+    <div class="pane" id="pane-text">
+      <label for="tModel">Модель</label>
+      <select id="tModel" disabled></select>
+
+      <label for="tPrompt">Что написать</label>
+      <textarea id="tPrompt" style="min-height:120px" placeholder="Например: напиши раздел «Почему мы» для КП студии видеопродакшена, 4 абзаца"></textarea>
+
+      <label class="check"><input type="checkbox" id="tSel"> Учитывать выделенный в документе текст</label>
+      <label class="check" id="tSearchWrap" style="display:none"><input type="checkbox" id="tSearch"> Искать в интернете</label>
+
+      <button class="act" id="tGo" disabled>Написать и вставить</button>
+      <div class="status" id="st-text"></div>
+      <div class="out" id="tOut"></div>
+      <button class="sec" id="tAgain" style="display:none">Вставить ещё раз</button>
+    </div>
+
+    <!-- ================= ШАБЛОНЫ ================= -->
+    <div class="pane" id="pane-tpl">
+      <div id="tplRun">
+        <label for="tplSelect">Шаблон</label>
+        <select id="tplSelect"></select>
+
+        <div id="tplFields"></div>
+
+        <div id="tplRefBox" class="hide">
+          <label>Референс для картинок <span class="muted">— необязательно</span></label>
+          <label class="filebtn" for="tplRefFile">＋ Добавить референс</label>
+          <input type="file" id="tplRefFile" class="hide" accept="image/*" multiple>
+          <div class="chips" id="tplRefList"></div>
+          <div class="muted">Загруженные картинки уйдут в каждую иллюстрацию документа: модель переделает их по промпту.</div>
+        </div>
+
+        <button class="act" id="tplGo">Сгенерировать в документ</button>
+        <div class="status" id="st-tpl"></div>
+        <div class="links">
+          <a id="tplEdit">✎ Редактировать</a>
+          <a id="tplNew">+ Новый</a>
+          <a id="tplReset">Сбросить к заводским</a>
+        </div>
+      </div>
+
+      <div id="tplEditor" class="hide">
+        <label for="eName">Название</label>
+        <input type="text" id="eName">
+
+        <label for="eModel">Текстовая модель</label>
+        <select id="eModel"></select>
+
+        <label for="eSystem">Роль / правила (системный промпт)</label>
+        <textarea id="eSystem" style="min-height:110px"></textarea>
+
+        <label for="eUser">Задание. Подстановки пиши в двойных фигурных скобках</label>
+        <textarea id="eUser" style="min-height:110px"></textarea>
+        <div class="muted">Например: «Клиент: {{клиент}}» — в сайдбаре появится поле «клиент».</div>
+
+        <fieldset>
+          <legend>Картинки</legend>
+          <label class="check"><input type="checkbox" id="eImages"> Модель сама расставляет картинки</label>
+          <div id="eImageOpts">
+            <div class="row">
+              <div>
+                <label for="eImageModel">Модель</label>
+                <select id="eImageModel"></select>
+              </div>
+              <div>
+                <label for="eMaxImages">Сколько максимум</label>
+                <input type="number" id="eMaxImages" min="1" max="8" value="3">
+              </div>
+            </div>
+            <div class="row">
+              <div>
+                <label for="eAspect">Формат</label>
+                <select id="eAspect"></select>
+              </div>
+              <div>
+                <label for="eWidth">Ширина</label>
+                <select id="eWidth">
+                  <option value="100">Во всю ширину</option>
+                  <option value="75">75 %</option>
+                  <option value="50">50 %</option>
+                  <option value="0">Оригинал</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </fieldset>
+
+        <button class="act" id="eSave">Сохранить шаблон</button>
+        <button class="sec" id="eCancel">Отмена</button>
+        <div class="links"><a id="eDelete">Удалить шаблон</a></div>
+        <div class="status" id="st-editor"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="lb" id="lb">
+    <img id="lbImg" alt="">
+    <div class="bar2">
+      <a id="lbOpen" href="#" target="_blank">Открыть в новой вкладке</a>
+      <b id="lbClose">✕</b>
+    </div>
+  </div>
+
+<script>
+  var INITIAL_TAB = '<?= initialTab ?>';
+  var DEFAULTS = { model: 'chatgpt-image-2', resolution: '1K', aspect: '16:9', width: '100' };
+
+  var MODELS = [], TEXT_MODELS = [], TEMPLATES = [];
+  var IMAGE_REFS = [], TPL_REFS = [];
+  var lastImageUrl = null, lastText = null;
+
+  function el(id) { return document.getElementById(id); }
+  function say(pane, msg, cls) { var s = el('st-' + pane); if (s) { s.textContent = msg; s.className = 'status ' + (cls || ''); } }
+  function modelById(id) { return MODELS.filter(function (m) { return m.id === id; })[0]; }
+
+  // ---------- лайтбокс ----------
+  function showImage(url) {
+    el('lbImg').src = url;
+    el('lbOpen').href = url;
+    el('lb').className = 'lb on';
+  }
+  el('lbClose').onclick = function () { el('lb').className = 'lb'; };
+  el('lb').onclick = function (e) { if (e.target === el('lb')) el('lb').className = 'lb'; };
+
+  // ---------- вкладки ----------
+  Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
+    b.onclick = function () { showTab(b.getAttribute('data-tab')); };
+  });
+  function showTab(tab) {
+    Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
+      b.className = b.getAttribute('data-tab') === tab ? 'on' : '';
+    });
+    ['image', 'text', 'tpl'].forEach(function (t) {
+      el('pane-' + t).className = 'pane' + (t === tab ? ' on' : '');
+    });
+  }
+
+  // ---------- настройки ----------
+  function openSettings(force) {
+    el('settings').className = '';
+    el('main').className = 'hide';
+    el('closeSettings').className = force ? 'sec hide' : 'sec';
+    google.script.run.withSuccessHandler(function (info) {
+      el('keyState').textContent = info.hasKey ? 'Сейчас используется ключ ' + info.masked : 'Ключ ещё не задан.';
+    }).uiKeyInfo();
+  }
+  function closeSettings() {
+    el('settings').className = 'hide';
+    el('main').className = '';
+  }
+  el('gear').onclick = function () {
+    if (el('settings').className === 'hide') openSettings(false); else closeSettings();
+  };
+  el('closeSettings').onclick = closeSettings;
+
+  el('saveKey').onclick = function () {
+    var key = el('apiKey').value.trim();
+    say('settings', 'Сохраняю…');
+    google.script.run
+      .withSuccessHandler(function (info) {
+        el('apiKey').value = '';
+        el('keyState').textContent = info.hasKey ? 'Сейчас используется ключ ' + info.masked : 'Ключ удалён.';
+        say('settings', info.hasKey ? 'Ключ сохранён. Загружаю модели…' : 'Ключ удалён.', 'ok');
+        if (info.hasKey) boot();
+      })
+      .withFailureHandler(function (err) { say('settings', (err && err.message) || String(err), 'err'); })
+      .uiSaveKey(key);
+  };
+
+  el('checkBalance').onclick = function () {
+    say('settings', 'Спрашиваю Genosai…');
+    google.script.run
+      .withSuccessHandler(function (b) {
+        say('settings', 'Кредитов: ' + b.total + '\n(основной счёт ' + b.main + ', бонусы ' + b.bonus + ')', 'ok');
+        el('balance').textContent = b.total + ' кр.';
+      })
+      .withFailureHandler(function (err) { say('settings', (err && err.message) || String(err), 'err'); })
+      .uiCheckBalance();
+  };
+
+  // ---------- общее ----------
+  function fillSelect(select, options, def, emptyLabel) {
+    select.innerHTML = '';
+    if (!options || !options.length) {
+      select.innerHTML = '<option value="">' + emptyLabel + '</option>';
+      select.disabled = true;
+      return;
+    }
+    select.disabled = false;
+    options.forEach(function (o) {
+      var opt = document.createElement('option');
+      opt.value = o; opt.textContent = o;
+      if (o === def) opt.selected = true;
+      select.appendChild(opt);
+    });
+  }
+
+  function refreshBalance() {
+    google.script.run.withSuccessHandler(function (b) {
+      el('balance').textContent = b + ' кр.';
+    }).uiGetBalance();
+  }
+
+  // ---------- референсы ----------
+  function renderChips(listId, store) {
+    var box = el(listId);
+    box.innerHTML = '';
+    store.forEach(function (ref, idx) {
+      var chip = document.createElement('div');
+      chip.className = 'chip';
+      var img = document.createElement('img');
+      img.src = ref.url;
+      img.onclick = function () { showImage(ref.url); };
+      var name = document.createElement('span');
+      name.textContent = ref.name;
+      name.title = 'Посмотреть';
+      name.onclick = function () { showImage(ref.url); };
+      var x = document.createElement('b');
+      x.textContent = '✕'; x.title = 'Убрать';
+      x.onclick = function () { store.splice(idx, 1); renderChips(listId, store); };
+      chip.appendChild(img); chip.appendChild(name); chip.appendChild(x);
+      box.appendChild(chip);
+    });
+  }
+
+  function uploadRefs(input, store, listId, max, pane) {
+    var files = Array.prototype.slice.call(input.files || []);
+    input.value = '';
+    if (!files.length) return;
+    if (store.length + files.length > max) {
+      files = files.slice(0, Math.max(0, max - store.length));
+      if (!files.length) { say(pane, 'Для этой модели максимум ' + max + ' референс(ов).', 'err'); return; }
+    }
+    var i = 0;
+    function next() {
+      if (i >= files.length) { say(pane, 'Референс загружен.', 'ok'); return; }
+      var file = files[i];
+      say(pane, 'Загружаю ' + file.name + '…');
+      var reader = new FileReader();
+      reader.onload = function () {
+        google.script.run
+          .withSuccessHandler(function (ref) { store.push(ref); renderChips(listId, store); i++; next(); })
+          .withFailureHandler(function (err) { say(pane, 'Не загрузилось: ' + ((err && err.message) || err), 'err'); i++; next(); })
+          .uiUploadReference(reader.result, file.name);
+      };
+      reader.onerror = function () { say(pane, 'Не смог прочитать ' + file.name, 'err'); i++; next(); };
+      reader.readAsDataURL(file);
+    }
+    next();
+  }
+
+  function refsUrls(store) { return store.map(function (r) { return r.url; }); }
+
+  el('refFile').onchange = function () {
+    var m = modelById(el('model').value);
+    uploadRefs(this, IMAGE_REFS, 'refList', (m && m.maxRefs) || 1, 'image');
+  };
+  el('tplRefFile').onchange = function () {
+    var t = currentTemplate();
+    var m = modelById(t && t.imageModel);
+    uploadRefs(this, TPL_REFS, 'tplRefList', (m && m.maxRefs) || 1, 'tpl');
+  };
+
+  // ---------- движок генерации ----------
+  function generateImage(cfg, onProgress, onDone, onFail) {
+    google.script.run
+      .withSuccessHandler(function (taskId) { pollImage(taskId, 0, onProgress, onDone, onFail); })
+      .withFailureHandler(onFail)
+      .uiStartGeneration(cfg);
+  }
+
+  function pollImage(taskId, tries, onProgress, onDone, onFail) {
+    if (tries > 150) { onFail(new Error('Картинка рисуется слишком долго.')); return; }
+    google.script.run
+      .withSuccessHandler(function (info) {
+        if (info.status === 'succeeded' && info.url) { onDone(info.url); return; }
+        if (['failed', 'error', 'canceled'].indexOf(info.status) >= 0) {
+          onFail(new Error('Генерация не удалась: ' + (info.error || info.status)));
+          return;
+        }
+        if (onProgress) onProgress(tries);
+        setTimeout(function () { pollImage(taskId, tries + 1, onProgress, onDone, onFail); }, 3000);
+      })
+      .withFailureHandler(onFail)
+      .uiPollTask(taskId);
+  }
+
+  // ---------- вкладка «Картинка» ----------
+  function onModelChange() {
+    var m = modelById(el('model').value);
+    if (!m) return;
+    fillSelect(el('ar'), m.aspectRatios, m.aspectRatios.indexOf(DEFAULTS.aspect) >= 0 ? DEFAULTS.aspect : m.aspectDefault, 'по умолчанию');
+    fillSelect(el('res'), m.resolutions, m.resolutions.indexOf(DEFAULTS.resolution) >= 0 ? DEFAULTS.resolution : m.resolutionDefault, 'по умолчанию');
+
+    var canRef = m.maxRefs > 0;
+    el('refBox').style.display = canRef ? 'block' : 'none';
+    el('refHint').textContent = canRef ? '— до ' + m.maxRefs + ' шт., модель переделает их по промпту' : '';
+    el('refFile').accept = m.accept || 'image/*';
+    if (!canRef) { IMAGE_REFS.length = 0; el('useSel').checked = false; }
+    else if (IMAGE_REFS.length > m.maxRefs) IMAGE_REFS.length = m.maxRefs;
+    renderChips('refList', IMAGE_REFS);
+  }
+
+  el('go').onclick = function () {
+    var prompt = el('prompt').value.trim();
+    if (!prompt) { say('image', 'Напиши, что нарисовать.', 'err'); return; }
+    el('go').disabled = true; el('go').textContent = 'Генерирую…';
+    el('preview').style.display = 'none';
+    say('image', 'Отправляю задачу…');
+
+    generateImage({
+      model: el('model').value,
+      prompt: prompt,
+      aspectRatio: el('ar').value,
+      resolution: el('res').value,
+      useSelection: el('useSel').checked,
+      referenceUrls: refsUrls(IMAGE_REFS)
+    },
+    function (t) { say('image', 'Рисую' + new Array((t % 4) + 2).join('.')); },
+    function (url) {
+      lastImageUrl = url;
+      el('previewImg').src = url;
+      el('previewImg').onclick = function () { showImage(url); };
+      el('preview').style.display = 'block';
+      say('image', 'Готово, вставляю…');
+      insertLastImage();
+    },
+    function (err) {
+      el('go').disabled = false; el('go').textContent = 'Создать и вставить';
+      say('image', (err && err.message) || String(err), 'err');
+    });
+  };
+
+  function insertLastImage() {
+    if (!lastImageUrl) return;
+    google.script.run
+      .withSuccessHandler(function (msg) {
+        el('go').disabled = false; el('go').textContent = 'Создать и вставить';
+        say('image', msg, 'ok');
+        refreshBalance();
+      })
+      .withFailureHandler(function (err) {
+        el('go').disabled = false; el('go').textContent = 'Создать и вставить';
+        say('image', (err && err.message) || String(err), 'err');
+      })
+      .uiInsertImage(lastImageUrl, {
+        widthPercent: Number(el('width').value),
+        caption: el('caption').checked ? el('prompt').value.trim() : ''
+      });
+  }
+  el('again').onclick = insertLastImage;
+
+  // ---------- вкладка «Текст» ----------
+  function onTextModelChange() {
+    var m = TEXT_MODELS[el('tModel').selectedIndex];
+    el('tSearchWrap').style.display = (m && m.webSearch) ? 'flex' : 'none';
+    if (!m || !m.webSearch) el('tSearch').checked = false;
+  }
+
+  el('tGo').onclick = function () {
+    var prompt = el('tPrompt').value.trim();
+    if (!prompt) { say('text', 'Напиши, что нужно.', 'err'); return; }
+    el('tGo').disabled = true; el('tGo').textContent = 'Пишу…';
+    el('tOut').style.display = 'none';
+    el('tAgain').style.display = 'none';
+    say('text', 'Модель думает…');
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        lastText = res.text;
+        el('tOut').textContent = res.text;
+        el('tOut').style.display = 'block';
+        say('text', 'Вставляю в документ… (' + res.credits + ' кр.)');
+        insertLastText();
+      })
+      .withFailureHandler(function (err) {
+        el('tGo').disabled = false; el('tGo').textContent = 'Написать и вставить';
+        say('text', (err && err.message) || String(err), 'err');
+      })
+      .uiChat({
+        model: el('tModel').value,
+        prompt: prompt,
+        useSelection: el('tSel').checked,
+        webSearch: el('tSearch').checked
+      });
+  };
+
+  function insertLastText() {
+    if (!lastText) return;
+    google.script.run
+      .withSuccessHandler(function (markers) {
+        el('tGo').disabled = false; el('tGo').textContent = 'Написать и вставить';
+        el('tAgain').style.display = 'block';
+        refreshBalance();
+        if (markers && markers.length) {
+          runMarkers('text', markers, {
+            model: el('model').value,
+            aspectRatio: el('ar').value,
+            widthPercent: Number(el('width').value),
+            referenceUrls: refsUrls(IMAGE_REFS)
+          });
+        } else {
+          say('text', 'Текст вставлен в документ.', 'ok');
+        }
+      })
+      .withFailureHandler(function (err) {
+        el('tGo').disabled = false; el('tGo').textContent = 'Написать и вставить';
+        say('text', (err && err.message) || String(err), 'err');
+      })
+      .uiInsertMarkdown(lastText);
+  }
+  el('tAgain').onclick = insertLastText;
+
+  // ---------- картинки по маркерам ----------
+  function runMarkers(pane, markers, cfg) {
+    var failed = [];
+    var i = 0;
+
+    function next() {
+      if (i >= markers.length) {
+        if (failed.length) {
+          google.script.run.uiCleanupMarkers(failed.map(function (m) { return m.token; }));
+          say(pane, 'Готово. Картинок не получилось: ' + failed.length + '.', 'ok');
+        } else {
+          say(pane, 'Готово: текст и ' + markers.length + ' картинк(и) в документе.', 'ok');
+        }
+        el('tplGo').disabled = false; el('tplGo').textContent = 'Сгенерировать в документ';
+        refreshBalance();
+        return;
+      }
+      var m = markers[i];
+      say(pane, 'Картинка ' + (i + 1) + ' из ' + markers.length + ': ' + m.prompt.slice(0, 60) + '…');
+      generateImage({
+        model: cfg.model,
+        prompt: m.prompt,
+        aspectRatio: cfg.aspectRatio,
+        resolution: DEFAULTS.resolution,
+        referenceUrls: cfg.referenceUrls || []
+      },
+      null,
+      function (url) {
+        google.script.run
+          .withSuccessHandler(function () { i++; next(); })
+          .withFailureHandler(function () { failed.push(m); i++; next(); })
+          .uiReplaceMarker(m.token, url, cfg.widthPercent);
+      },
+      function () { failed.push(m); i++; next(); });
+    }
+    next();
+  }
+
+  // ---------- вкладка «Шаблоны» ----------
+  function renderTemplates(selectId) {
+    var s = el('tplSelect');
+    s.innerHTML = '';
+    TEMPLATES.forEach(function (t) {
+      var o = document.createElement('option');
+      o.value = t.id; o.textContent = t.name;
+      s.appendChild(o);
+    });
+    if (selectId) s.value = selectId;
+    s.onchange = renderFields;
+    renderFields();
+  }
+
+  function currentTemplate() {
+    var id = el('tplSelect').value;
+    return TEMPLATES.filter(function (t) { return t.id === id; })[0];
+  }
+
+  function renderFields() {
+    var t = currentTemplate();
+    var box = el('tplFields');
+    box.innerHTML = '';
+    if (!t) return;
+    (t.fields || []).forEach(function (key) {
+      var label = document.createElement('label');
+      label.textContent = key;
+      var input = document.createElement('textarea');
+      input.style.minHeight = '46px';
+      input.setAttribute('data-field', key);
+      box.appendChild(label);
+      box.appendChild(input);
+    });
+    if (!(t.fields || []).length) {
+      var hint = document.createElement('div');
+      hint.className = 'muted';
+      hint.style.marginTop = '10px';
+      hint.textContent = 'У шаблона нет подстановок — просто нажми кнопку.';
+      box.appendChild(hint);
+    }
+
+    var im = modelById(t.imageModel);
+    var canRef = !!t.images && !!im && im.maxRefs > 0;
+    el('tplRefBox').className = canRef ? '' : 'hide';
+    if (im) el('tplRefFile').accept = im.accept || 'image/*';
+    if (!canRef) TPL_REFS.length = 0;
+    renderChips('tplRefList', TPL_REFS);
+  }
+
+  el('tplGo').onclick = function () {
+    var t = currentTemplate();
+    if (!t) return;
+    var vars = {};
+    Array.prototype.forEach.call(el('tplFields').querySelectorAll('[data-field]'), function (i) {
+      vars[i.getAttribute('data-field')] = i.value.trim();
+    });
+    el('tplGo').disabled = true; el('tplGo').textContent = 'Работаю…';
+    say('tpl', 'Модель пишет документ…');
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        say('tpl', 'Текст готов (' + res.credits + ' кр.), вставляю…');
+        google.script.run
+          .withSuccessHandler(function (markers) {
+            if (markers && markers.length && t.images) {
+              runMarkers('tpl', markers, {
+                model: t.imageModel || DEFAULTS.model,
+                aspectRatio: t.imageAspect || DEFAULTS.aspect,
+                widthPercent: t.widthPercent === undefined ? 100 : t.widthPercent,
+                referenceUrls: refsUrls(TPL_REFS)
+              });
+            } else {
+              if (markers && markers.length) {
+                google.script.run.uiCleanupMarkers(markers.map(function (m) { return m.token; }));
+              }
+              el('tplGo').disabled = false; el('tplGo').textContent = 'Сгенерировать в документ';
+              say('tpl', 'Документ вставлен.', 'ok');
+              refreshBalance();
+            }
+          })
+          .withFailureHandler(function (err) {
+            el('tplGo').disabled = false; el('tplGo').textContent = 'Сгенерировать в документ';
+            say('tpl', (err && err.message) || String(err), 'err');
+          })
+          .uiInsertMarkdown(res.text);
+      })
+      .withFailureHandler(function (err) {
+        el('tplGo').disabled = false; el('tplGo').textContent = 'Сгенерировать в документ';
+        say('tpl', (err && err.message) || String(err), 'err');
+      })
+      .uiTemplateRun(t.id, vars);
+  };
+
+  // ---------- редактор шаблона ----------
+  var editingId = null;
+
+  function openEditor(tpl) {
+    editingId = tpl ? tpl.id : null;
+    el('eName').value = tpl ? tpl.name : '';
+    el('eModel').value = (tpl && tpl.model) || (TEXT_MODELS[0] && TEXT_MODELS[0].id) || '';
+    el('eSystem').value = (tpl && tpl.systemPrompt) || '';
+    el('eUser').value = (tpl && tpl.userPrompt) || '';
+    el('eImages').checked = tpl ? !!tpl.images : false;
+    el('eMaxImages').value = (tpl && tpl.maxImages) || 3;
+    el('eImageModel').value = (tpl && tpl.imageModel) || DEFAULTS.model;
+    onEditorImageModelChange((tpl && tpl.imageAspect) || DEFAULTS.aspect);
+    el('eWidth').value = String(tpl && tpl.widthPercent !== undefined ? tpl.widthPercent : 100);
+    el('eDelete').style.display = tpl ? 'inline' : 'none';
+    toggleImageOpts();
+    say('editor', '');
+    el('tplRun').className = 'hide';
+    el('tplEditor').className = '';
+  }
+
+  function closeEditor() {
+    el('tplEditor').className = 'hide';
+    el('tplRun').className = '';
+  }
+
+  function onEditorImageModelChange(preferred) {
+    var m = modelById(el('eImageModel').value);
+    if (!m) return;
+    var want = (typeof preferred === 'string' && preferred) ? preferred : m.aspectDefault;
+    fillSelect(el('eAspect'), m.aspectRatios, want, 'по умолчанию');
+  }
+
+  function toggleImageOpts() {
+    el('eImageOpts').style.display = el('eImages').checked ? 'block' : 'none';
+  }
+  el('eImages').onchange = toggleImageOpts;
+
+  el('tplEdit').onclick = function () { openEditor(currentTemplate()); };
+  el('tplNew').onclick = function () { openEditor(null); };
+  el('eCancel').onclick = closeEditor;
+
+  el('eSave').onclick = function () {
+    var tpl = {
+      id: editingId,
+      name: el('eName').value.trim(),
+      model: el('eModel').value,
+      systemPrompt: el('eSystem').value,
+      userPrompt: el('eUser').value,
+      images: el('eImages').checked,
+      maxImages: Number(el('eMaxImages').value) || 3,
+      imageModel: el('eImageModel').value,
+      imageAspect: el('eAspect').value,
+      widthPercent: Number(el('eWidth').value)
+    };
+    if (!tpl.name) { say('editor', 'Дай шаблону название.', 'err'); return; }
+    if (!tpl.userPrompt.trim()) { say('editor', 'Заполни задание.', 'err'); return; }
+    say('editor', 'Сохраняю…');
+    google.script.run
+      .withSuccessHandler(function (list) {
+        TEMPLATES = list;
+        var keep = editingId || (list[list.length - 1] && list[list.length - 1].id);
+        renderTemplates(keep);
+        closeEditor();
+        say('tpl', 'Шаблон сохранён.', 'ok');
+      })
+      .withFailureHandler(function (err) { say('editor', (err && err.message) || String(err), 'err'); })
+      .uiTemplateSave(tpl);
+  };
+
+  el('eDelete').onclick = function () {
+    if (!editingId) return;
+    if (!confirm('Удалить шаблон?')) return;
+    google.script.run
+      .withSuccessHandler(function (list) {
+        TEMPLATES = list;
+        renderTemplates();
+        closeEditor();
+        say('tpl', 'Шаблон удалён.', 'ok');
+      })
+      .withFailureHandler(function (err) { say('editor', (err && err.message) || String(err), 'err'); })
+      .uiTemplateDelete(editingId);
+  };
+
+  el('tplReset').onclick = function () {
+    if (!confirm('Вернуть заводские шаблоны? Свои шаблоны будут удалены.')) return;
+    google.script.run
+      .withSuccessHandler(function (list) {
+        TEMPLATES = list;
+        renderTemplates();
+        say('tpl', 'Шаблоны сброшены.', 'ok');
+      })
+      .withFailureHandler(function (err) { say('tpl', (err && err.message) || String(err), 'err'); })
+      .uiTemplateReset();
+  };
+
+  // ---------- запуск ----------
+  function init(state) {
+    if (state.needsKey) {
+      openSettings(true);
+      say('settings', 'Вставь свой ключ Genosai — без него агент не сможет работать.');
+      return;
+    }
+    closeSettings();
+
+    MODELS = state.models || [];
+    TEXT_MODELS = state.textModels || [];
+    TEMPLATES = state.templates || [];
+
+    var sel = el('model');
+    sel.innerHTML = '';
+    MODELS.forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = m.id; o.textContent = m.name + ' — ' + m.cost + ' кр.';
+      sel.appendChild(o);
+    });
+    sel.disabled = false;
+    sel.onchange = onModelChange;
+    if (modelById(DEFAULTS.model)) sel.value = DEFAULTS.model;
+    onModelChange();
+    el('width').value = DEFAULTS.width;
+
+    [el('tModel'), el('eModel')].forEach(function (s) {
+      s.innerHTML = '';
+      TEXT_MODELS.forEach(function (m) {
+        var o = document.createElement('option');
+        o.value = m.id; o.textContent = m.name;
+        s.appendChild(o);
+      });
+      s.disabled = false;
+    });
+    el('tModel').onchange = onTextModelChange;
+    onTextModelChange();
+
+    var em = el('eImageModel');
+    em.innerHTML = '';
+    MODELS.forEach(function (m) {
+      var o = document.createElement('option');
+      o.value = m.id; o.textContent = m.name;
+      em.appendChild(o);
+    });
+    em.onchange = onEditorImageModelChange;
+
+    renderTemplates();
+
+    el('balance').textContent = state.balance === null ? '' : state.balance + ' кр.';
+    el('go').disabled = false;
+    el('tGo').disabled = false;
+    if (INITIAL_TAB && INITIAL_TAB !== 'image') showTab(INITIAL_TAB);
+  }
+
+  function boot() {
+    google.script.run
+      .withSuccessHandler(init)
+      .withFailureHandler(function (err) {
+        openSettings(true);
+        say('settings', (err && err.message) || String(err), 'err');
+      })
+      .uiGetState();
+  }
+
+  boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+# ключи и локальные секреты — в репозиторий не попадают
+api_key.txt
+*.key
+.clasprc.json
+.clasp.json
+
+# служебное
+.DS_Store
+Thumbs.db
+node_modules/
