@@ -207,6 +207,11 @@ function uiSlideText() {
   return slidesCurrentText();
 }
 
+/** Опись слайдов: текст и есть ли картинка — для массовой дорисовки. */
+function uiSlidesOverview() {
+  return slidesOverview();
+}
+
 // ---------- перерисовать выделенную картинку ----------
 
 /** Рамка выделенной картинки или null. */

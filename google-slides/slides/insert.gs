@@ -198,6 +198,28 @@ function slidesCollectImages_(elements) {
   return found;
 }
 
+/**
+ * Опись презентации для массовой дорисовки: у каждого слайда — текст и есть ли уже картинка.
+ * → [{slideId, num, text, hasImage}]
+ */
+function slidesOverview() {
+  return SlidesApp.getActivePresentation().getSlides().map(function (slide, i) {
+    var elements = slide.getPageElements();
+    var texts = [];
+    elements.forEach(function (el) {
+      if (el.getPageElementType() !== SlidesApp.PageElementType.SHAPE) return;
+      var t = el.asShape().getText().asString().trim();
+      if (t) texts.push(t);
+    });
+    return {
+      slideId: slide.getObjectId(),
+      num: i + 1,
+      text: texts.join('\n'),
+      hasImage: slidesCollectImages_(elements).length > 0
+    };
+  });
+}
+
 /** Весь текст текущего слайда — исходник для промпта «нарисуй к этому слайду». */
 function slidesCurrentText() {
   var slide = slidesCurrent_();

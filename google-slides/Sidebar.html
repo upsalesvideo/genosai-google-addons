@@ -301,6 +301,32 @@
         <label class="check"><input type="checkbox" id="dImages" checked> Рисовать картинки в выбранном стиле</label>
 
         <button class="act" id="dGo" disabled>Собрать презентацию</button>
+
+        <fieldset>
+          <legend>Дорисовать картинки к готовым слайдам</legend>
+          <div class="muted">Пройду по слайдам, соберу промпт из их текста и нарисую в выбранном стиле.</div>
+          <div class="row">
+            <div>
+              <label for="fillWhat">Какие слайды</label>
+              <select id="fillWhat">
+                <option value="empty">Только без картинок</option>
+                <option value="all">Все подряд</option>
+              </select>
+            </div>
+            <div>
+              <label for="fillPlacement">Раскладка</label>
+              <select id="fillPlacement">
+                <option value="full">Весь слайд, за текстом</option>
+                <option value="right">Справа</option>
+                <option value="left">Слева</option>
+              </select>
+            </div>
+          </div>
+          <button class="sec" id="fillScan">Посмотреть, сколько будет стоить</button>
+          <div class="status" id="st-fill"></div>
+          <button class="act hide" id="fillGo">Дорисовать картинки</button>
+          <div class="bar" id="fillBar"><i id="fillBarFill"></i></div>
+        </fieldset>
       </div>
 
       <div id="deckPlan" class="hide">
@@ -1427,6 +1453,88 @@
     }
     next();
   }
+
+
+  // ---------- дорисовка картинок к готовым слайдам ----------
+  var FILL_LIST = [];
+
+  el('fillScan').onclick = function () {
+    say('fill', 'Смотрю слайды…');
+    google.script.run
+      .withSuccessHandler(function (slides) {
+        var onlyEmpty = el('fillWhat').value === 'empty';
+        FILL_LIST = slides.filter(function (sl) {
+          if (!sl.text || sl.text.trim().length < 10) return false;   // пустые и почти пустые пропускаем
+          return onlyEmpty ? !sl.hasImage : true;
+        });
+        if (!FILL_LIST.length) {
+          el('fillGo').className = 'act hide';
+          say('fill', 'Подходящих слайдов не нашёл: нужен текст, по которому можно придумать картинку.', 'err');
+          return;
+        }
+        var style = activeStyle();
+        var im = modelById((style && style.model) || DEFAULTS.model);
+        var cost = im && im.cost ? FILL_LIST.length * im.cost : 0;
+        var balance = parseFloat(el('balance').textContent) || 0;
+        say('fill', 'Слайдов: ' + FILL_LIST.length + '. Картинки ~' + cost + ' кр.' +
+          ' Плюс промпты — примерно ' + Math.round(FILL_LIST.length * 0.1 * 10) / 10 + ' кр.' +
+          (balance ? ' Баланс: ' + balance + (cost > balance ? ' — не хватит!' : '') : ''));
+        el('fillGo').className = 'act';
+      })
+      .withFailureHandler(function (err) { say('fill', (err && err.message) || String(err), 'err'); })
+      .uiSlidesOverview();
+  };
+
+  el('fillGo').onclick = function () {
+    if (!FILL_LIST.length) return;
+    if (!confirm('Дорисовать картинки на ' + FILL_LIST.length + ' слайд(ов)? Это спишет кредиты.')) return;
+
+    var style = activeStyle();
+    var modelId = (style && style.model) || DEFAULTS.model;
+    var model = modelById(modelId);
+    var placement = el('fillPlacement').value;
+    var i = 0, done = 0, failed = 0;
+
+    el('fillGo').disabled = true; el('fillGo').textContent = 'Рисую…';
+    el('fillBar').style.display = 'block';
+
+    function step() {
+      if (i >= FILL_LIST.length) {
+        el('fillGo').disabled = false; el('fillGo').textContent = 'Дорисовать картинки';
+        el('fillBarFill').style.width = '100%';
+        say('fill', 'Готово: картинок добавлено ' + done + (failed ? ', не получилось ' + failed : '') + '.', 'ok');
+        refreshBalance();
+        return;
+      }
+      var sl = FILL_LIST[i];
+      el('fillBarFill').style.width = Math.round(i / FILL_LIST.length * 100) + '%';
+      say('fill', 'Слайд ' + sl.num + ' (' + (i + 1) + ' из ' + FILL_LIST.length + '): придумываю картинку…');
+
+      google.script.run
+        .withSuccessHandler(function (res) {
+          say('fill', 'Слайд ' + sl.num + ' (' + (i + 1) + ' из ' + FILL_LIST.length + '): рисую…');
+          generateImage({
+            model: modelId,
+            prompt: res.prompt,
+            aspectRatio: bestAspect(model, targetRatio(placement)) || DEFAULTS.aspect,
+            resolution: DEFAULTS.resolution,
+            styleId: ACTIVE_STYLE_ID,
+            maxRefs: (model && model.maxRefs) || 1
+          },
+          null,
+          function (url) {
+            google.script.run
+              .withSuccessHandler(function () { done++; i++; step(); })
+              .withFailureHandler(function () { failed++; i++; step(); })
+              .uiInsertImage(url, { slideId: sl.slideId, placement: placement });
+          },
+          function () { failed++; i++; step(); });
+        })
+        .withFailureHandler(function () { failed++; i++; step(); })
+        .uiEnhancePrompt('Иллюстрация к слайду презентации со следующим текстом:\n' + sl.text, ACTIVE_STYLE_ID);
+    }
+    step();
+  };
 
   // ---------- запуск ----------
   function init(state) {
