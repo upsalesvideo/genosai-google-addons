@@ -60,6 +60,8 @@ function uiGetState() {
     styles: styleList(),
     deck: { ratio: deck.ratio, width: deck.width, height: deck.height, slides: deck.slides },
     key: uiKeyInfo(),
+    jobs: jobsList(),          // незаконченные задачи — сайдбар их подхватит
+    history: historyList(),
     balance: null
   };
   try {
@@ -90,14 +92,16 @@ function uiStartGeneration(params) {
   if (params.aspectRatio) input.aspect_ratio = params.aspectRatio;
   if (params.resolution) input.resolution = params.resolution;
 
+  // порядок важен: если у модели маленький лимит референсов, отрезаться должны
+  // эталоны стиля, а не то, что пользователь только что загрузил руками
   var refs = [];
+  (params.referenceUrls || []).forEach(function (u) { if (u) refs.push(u); });
   if (params.useSelection) {
     var blob = slidesSelectedImageBlob_();
     if (!blob) throw new Error('На слайде не выделена картинка — сними галочку «выделенная картинка как референс».');
     refs.push(genosaiUpload_(blob));
   }
   styleRefUrls_(style).forEach(function (u) { refs.push(u); });
-  (params.referenceUrls || []).forEach(function (u) { if (u) refs.push(u); });
 
   if (refs.length) {
     var max = Number(params.maxRefs) || refs.length;
@@ -105,6 +109,94 @@ function uiStartGeneration(params) {
   }
 
   return genosaiCreateTask(params.model, input);
+}
+
+// ---------- очередь и история ----------
+
+/** Запомнить задачу, чтобы её можно было доделать после закрытия сайдбара. */
+function uiJobSave(job) {
+  job.created = new Date().getTime();
+  jobsAdd(job);
+  return job;
+}
+
+/** Задача доведена до конца: убрать из очереди, записать в историю. */
+function uiJobDone(id, entry) {
+  jobsRemove(id);
+  if (entry && entry.url) {
+    entry.at = new Date().getTime();
+    historyAdd(entry);
+  }
+  return true;
+}
+
+function uiJobDrop(id) {
+  jobsRemove(id);
+  return true;
+}
+
+function uiHistory() {
+  return historyList();
+}
+
+function uiHistoryClear() {
+  return historyClear();
+}
+
+/** Убрать вставленную картинку со слайда. */
+function uiRemoveElement(slideId, elementId) {
+  return slidesRemoveElement(slideId, elementId);
+}
+
+/** Генерация упала — убрать созданный под неё пустой слайд. */
+function uiCancelTarget(slideId) {
+  return slidesRemoveIfEmpty(slideId);
+}
+
+// ---------- помощь с промптом ----------
+
+/**
+ * Развернуть короткую мысль в подробный промпт на английском под выбранный стиль.
+ * Идёт на дешёвой модели — доли кредита.
+ */
+function uiEnhancePrompt(text, styleId, model) {
+  var idea = String(text || '').trim();
+  if (!idea) throw new Error('Сначала напиши, что нарисовать, хотя бы парой слов.');
+
+  var style = styleGet_(styleId);
+  var system =
+    'Ты помогаешь составлять промпты для генератора изображений. ' +
+    'Из короткой мысли пользователя делаешь один подробный промпт НА АНГЛИЙСКОМ: ' +
+    'что в кадре, композиция, план, освещение, настроение, детали. ' +
+    'Без текста и логотипов на картинке, без людей-знаменитостей, без брендов. ' +
+    'Отвечай ТОЛЬКО промптом — без кавычек, пояснений и вступлений. Максимум 60 слов.' +
+    (style && style.description
+      ? '\nПромпт должен ложиться в этот визуальный стиль: ' + style.description
+      : '');
+
+  var out = genosaiChat(model || 'gemini-2.5-flash-lite', [
+    { role: 'system', content: system },
+    { role: 'user', content: idea }
+  ], { max_tokens: 300 });
+
+  return { prompt: out.content.trim().replace(/^["'`]+|["'`]+$/g, ''), credits: out.credits };
+}
+
+/** Текст текущего слайда — основа для промпта «нарисуй к этому слайду». */
+function uiSlideText() {
+  return slidesCurrentText();
+}
+
+// ---------- перерисовать выделенную картинку ----------
+
+/** Рамка выделенной картинки или null. */
+function uiSelectedImageBox() {
+  return slidesSelectedImageBox();
+}
+
+/** Поставить новую картинку в ту же рамку вместо старой. */
+function uiReplaceImage(box, url) {
+  return slidesReplaceImage(box, url);
 }
 
 function uiPollTask(taskId) {

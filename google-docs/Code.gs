@@ -57,6 +57,8 @@ function uiGetState() {
     textModels: genosaiTextModels(),
     templates: uiTemplates(),
     key: uiKeyInfo(),
+    jobs: jobsList(),          // незаконченные задачи — сайдбар их подхватит
+    history: historyList(),
     balance: null
   };
   try {
@@ -162,18 +164,94 @@ function uiStartGeneration(params) {
   if (params.aspectRatio) input.aspect_ratio = params.aspectRatio;
   if (params.resolution) input.resolution = params.resolution;
 
+  // сначала то, что пользователь загрузил руками: если лимит модели маленький,
+  // отрезаться должно не оно
   var refs = [];
+  (params.referenceUrls || []).forEach(function (u) {
+    if (u) refs.push(u);
+  });
   if (params.useSelection) {
     var blob = getSelectedImageBlob_();
     if (!blob) throw new Error('В документе не выделена картинка — сними галочку «референс из документа».');
     refs.push(genosaiUpload_(blob));
   }
-  (params.referenceUrls || []).forEach(function (u) {
-    if (u) refs.push(u);
-  });
-  if (refs.length) input.image_urls = refs;
+  if (refs.length) {
+    var max = Number(params.maxRefs) || refs.length;
+    input.image_urls = refs.slice(0, max);
+  }
 
   return genosaiCreateTask(params.model, input);
+}
+
+// ---------- очередь и история ----------
+
+/** Место вставки закрепляется в момент запуска: пока рисуется, курсор уедет. */
+function uiPrepareTarget() {
+  var doc = DocumentApp.getActiveDocument();
+  var body = doc.getBody();
+  var index = mdCursorIndex_(doc, body);
+  // ставим абзац-якорь: он и будет местом картинки, куда бы ни ушёл курсор
+  var token = '⟦GENOSAI-SPOT-' + Utilities.getUuid().slice(0, 6) + '⟧';
+  var holder = body.insertParagraph(index, token);
+  holder.setAlignment(DocumentApp.HorizontalAlignment.CENTER);
+  return token;
+}
+
+/** Убрать якорь, если генерация не удалась. */
+function uiCancelTarget(token) {
+  docCleanupMarkers([token]);
+  return true;
+}
+
+function uiJobSave(job) {
+  job.created = new Date().getTime();
+  jobsAdd(job);
+  return job;
+}
+
+function uiJobDone(id, entry) {
+  jobsRemove(id);
+  if (entry && entry.url) {
+    entry.at = new Date().getTime();
+    historyAdd(entry);
+  }
+  return true;
+}
+
+function uiJobDrop(id) {
+  jobsRemove(id);
+  return true;
+}
+
+function uiHistory() {
+  return historyList();
+}
+
+function uiHistoryClear() {
+  return historyClear();
+}
+
+/**
+ * Развернуть короткую мысль в подробный промпт на английском.
+ * Идёт на дешёвой модели — доли кредита.
+ */
+function uiEnhancePrompt(text, model) {
+  var idea = String(text || '').trim();
+  if (!idea) throw new Error('Сначала напиши, что нарисовать, хотя бы парой слов.');
+
+  var system =
+    'Ты помогаешь составлять промпты для генератора изображений. ' +
+    'Из короткой мысли пользователя делаешь один подробный промпт НА АНГЛИЙСКОМ: ' +
+    'что в кадре, композиция, план, освещение, настроение, детали. ' +
+    'Без текста и логотипов на картинке, без брендов. ' +
+    'Отвечай ТОЛЬКО промптом — без кавычек и пояснений. Максимум 60 слов.';
+
+  var out = genosaiChat(model || 'gemini-2.5-flash-lite', [
+    { role: 'system', content: system },
+    { role: 'user', content: idea }
+  ], { max_tokens: 300 });
+
+  return { prompt: out.content.trim().replace(/^["'`]+|["'`]+$/g, ''), credits: out.credits };
 }
 
 /**
@@ -198,6 +276,14 @@ function uiPollTask(taskId) {
  */
 function uiInsertImage(url, opts) {
   opts = opts || {};
+
+  // якорь, поставленный в момент запуска: картинка ляжет туда, откуда её запустили,
+  // даже если курсор давно уехал
+  if (opts.token) {
+    docReplaceMarker(opts.token, url, opts.widthPercent, opts.caption);
+    return 'Картинка вставлена в документ.';
+  }
+
   var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) {
     throw new Error('Не удалось скачать картинку (HTTP ' + res.getResponseCode() + ').');

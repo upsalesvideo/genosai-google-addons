@@ -59,6 +59,26 @@
     .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 110px; cursor: zoom-in; }
     .chip b { cursor: pointer; color: var(--muted); font-weight: 400; }
 
+    .mini { margin-top: 6px !important; padding: 6px 8px !important; font-size: 11px !important; font-weight: 500 !important; }
+
+    .jobs { margin-top: 10px; }
+    .job { display: flex; gap: 6px; align-items: baseline; font-size: 11px; padding: 4px 6px;
+      border-radius: 6px; background: var(--bg); margin-top: 4px; }
+    .job .n { color: var(--muted); }
+    .job .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .job .stt { white-space: nowrap; }
+    .job.ok { background: #e8f5ec; cursor: zoom-in; }
+    .job.ok .stt { color: #137333; }
+    .job.err { background: #fce8e6; }
+    .job.err .stt { color: #c5221f; }
+
+    .hist { margin-top: 8px; }
+    .hist .it { display: flex; gap: 8px; align-items: center; padding: 4px; border-radius: 6px; }
+    .hist .it:hover { background: var(--bg); }
+    .hist img { width: 46px; height: 26px; object-fit: cover; border-radius: 4px; cursor: zoom-in; }
+    .hist .tx { flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hist .ins { color: var(--accent); cursor: pointer; font-size: 11px; white-space: nowrap; }
+
     fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 14px 0 0; padding: 4px 10px 12px; }
     legend { font-size: 11px; color: var(--muted); padding: 0 4px; }
 
@@ -85,7 +105,9 @@
     <div class="muted" id="keyState"></div>
     <button class="act" id="saveKey">Сохранить ключ</button>
     <button class="sec" id="checkBalance">Проверить кредиты</button>
+    <button class="sec" id="selfTest">Диагностика (~1 кредит)</button>
     <div class="status" id="st-settings"></div>
+    <div class="jobs" id="testReport"></div>
     <button class="sec" id="closeSettings">Закрыть настройки</button>
     <div class="muted" style="margin-top:10px">
       Ключ хранится в вашем личном профиле Google и не виден другим соавторам файла.
@@ -107,6 +129,7 @@
 
       <label for="prompt">Что нарисовать</label>
       <textarea id="prompt" placeholder="Минималистичная иллюстрация: рабочий стол с ноутбуком, мягкий свет, пастельные тона"></textarea>
+      <button class="sec mini" id="enhance">✨ Улучшить промпт</button>
 
       <div class="row">
         <div>
@@ -138,12 +161,18 @@
       </div>
 
       <button class="act" id="go" disabled>Создать и вставить</button>
+
+      <div class="jobs" id="jobs"></div>
+      <div class="links" id="jobsBar" style="display:none"><a id="jobsClear">Очистить список</a></div>
       <div class="status" id="st-image"></div>
 
       <div class="preview" id="preview">
         <img id="previewImg" alt="">
         <button class="sec" id="again">Вставить ещё раз</button>
       </div>
+
+      <div class="links"><a id="histToggle">📁 История генераций</a></div>
+      <div class="hist hide" id="histBox"></div>
     </div>
 
     <!-- ================= ТЕКСТ ================= -->
@@ -327,6 +356,35 @@
       .uiCheckBalance();
   };
 
+
+  el('selfTest').onclick = function () {
+    el('selfTest').disabled = true;
+    el('testReport').innerHTML = '';
+    say('settings', 'Прогоняю цепочку: ключ, баланс, модели, текст, загрузка, картинка. Это до двух минут.');
+    google.script.run
+      .withSuccessHandler(function (report) {
+        el('selfTest').disabled = false;
+        var box = el('testReport');
+        box.innerHTML = '';
+        var bad = 0;
+        report.forEach(function (r) {
+          if (!r.ok) bad++;
+          var row = document.createElement('div');
+          row.className = 'job ' + (r.ok ? 'ok' : 'err');
+          var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = r.name;
+          var st = document.createElement('span'); st.className = 'stt'; st.textContent = (r.ok ? '✓ ' : '✕ ') + r.info;
+          row.appendChild(nm); row.appendChild(st);
+          box.appendChild(row);
+        });
+        say('settings', bad ? 'Проблем найдено: ' + bad + '. Смотри красные строки.' : 'Всё работает.', bad ? 'err' : 'ok');
+      })
+      .withFailureHandler(function (err) {
+        el('selfTest').disabled = false;
+        say('settings', (err && err.message) || String(err), 'err');
+      })
+      .uiSelfTest();
+  };
+
   // ---------- общее ----------
   function fillSelect(select, options, def, emptyLabel) {
     select.innerHTML = '';
@@ -450,54 +508,262 @@
     renderChips('refList', IMAGE_REFS);
   }
 
+  /**
+   * Очередь: кнопка освобождается сразу, как Genosai принял задачу.
+   * Место вставки закрепляется абзацем-якорем — курсор к моменту готовности уедет.
+   * Задача записывается на сервер: закрыл сайдбар — при следующем открытии доделаем.
+   */
+  var JOBS = [], jobSeq = 0, HISTORY = [];
+
+  function freeButton() {
+    el('go').disabled = false;
+    el('go').textContent = 'Создать и вставить';
+  }
+
+  function renderJobs() {
+    var box = el('jobs');
+    box.innerHTML = '';
+    JOBS.forEach(function (j) {
+      var row = document.createElement('div');
+      row.className = 'job' + (j.state === 'ok' ? ' ok' : j.state === 'err' ? ' err' : '');
+      var n = document.createElement('span'); n.className = 'n'; n.textContent = '#' + j.n;
+      var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = j.label;
+      var st = document.createElement('span'); st.className = 'stt'; st.textContent = j.text;
+      row.appendChild(n); row.appendChild(nm); row.appendChild(st);
+      if (j.url) row.onclick = function () { showImage(j.url); };
+      box.appendChild(row);
+    });
+    el('jobsBar').style.display = JOBS.length ? 'block' : 'none';
+  }
+
+  el('jobsClear').onclick = function () {
+    JOBS = JOBS.filter(function (j) { return j.state === 'run'; });
+    renderJobs();
+  };
+
+  function newJobId() { return 'j' + jobSeq + '_' + Math.floor(Math.random() * 1e6); }
+
   el('go').onclick = function () {
     var prompt = el('prompt').value.trim();
     if (!prompt) { say('image', 'Напиши, что нарисовать.', 'err'); return; }
-    el('go').disabled = true; el('go').textContent = 'Генерирую…';
-    el('preview').style.display = 'none';
-    say('image', 'Отправляю задачу…');
 
-    generateImage({
+    var m = modelById(el('model').value);
+    var cfg = {
       model: el('model').value,
       prompt: prompt,
       aspectRatio: el('ar').value,
       resolution: el('res').value,
       useSelection: el('useSel').checked,
-      referenceUrls: refsUrls(IMAGE_REFS)
-    },
-    function (t) { say('image', 'Рисую' + new Array((t % 4) + 2).join('.')); },
-    function (url) {
-      lastImageUrl = url;
-      el('previewImg').src = url;
-      el('previewImg').onclick = function () { showImage(url); };
-      el('preview').style.display = 'block';
-      say('image', 'Готово, вставляю…');
-      insertLastImage();
-    },
-    function (err) {
-      el('go').disabled = false; el('go').textContent = 'Создать и вставить';
-      say('image', (err && err.message) || String(err), 'err');
-    });
-  };
+      referenceUrls: refsUrls(IMAGE_REFS),
+      maxRefs: (m && m.maxRefs) || 1
+    };
+    var dest = {
+      widthPercent: Number(el('width').value),
+      caption: el('caption').checked ? prompt : ''
+    };
 
-  function insertLastImage() {
-    if (!lastImageUrl) return;
+    el('go').disabled = true; el('go').textContent = 'Отправляю…';
+    say('image', '');
+
     google.script.run
-      .withSuccessHandler(function (msg) {
-        el('go').disabled = false; el('go').textContent = 'Создать и вставить';
-        say('image', msg, 'ok');
-        refreshBalance();
+      .withSuccessHandler(function (token) {
+        dest.token = token;
+        startJob(cfg, dest);
       })
       .withFailureHandler(function (err) {
-        el('go').disabled = false; el('go').textContent = 'Создать и вставить';
+        freeButton();
         say('image', (err && err.message) || String(err), 'err');
       })
-      .uiInsertImage(lastImageUrl, {
-        widthPercent: Number(el('width').value),
-        caption: el('caption').checked ? el('prompt').value.trim() : ''
+      .uiPrepareTarget();
+  };
+
+  function startJob(cfg, dest) {
+    var job = {
+      n: ++jobSeq,
+      id: newJobId(),
+      label: cfg.prompt.length > 30 ? cfg.prompt.slice(0, 30) + '…' : cfg.prompt,
+      state: 'run',
+      text: 'отправляю…',
+      cfg: cfg,
+      dest: dest,
+      restarted: false
+    };
+    JOBS.push(job);
+    renderJobs();
+
+    google.script.run
+      .withSuccessHandler(function (taskId) {
+        freeButton();
+        job.taskId = taskId;
+        job.text = 'рисую…';
+        renderJobs();
+        google.script.run.uiJobSave({
+          id: job.id, taskId: taskId, prompt: cfg.prompt, model: cfg.model, dest: dest
+        });
+        watchJob(job);
+      })
+      .withFailureHandler(function (err) { freeButton(); failJob(job, err); })
+      .uiStartGeneration(cfg);
+  }
+
+  function watchJob(job) {
+    pollImage(job.taskId, 0,
+      function (t) { job.text = 'рисую' + new Array((t % 4) + 2).join('.'); renderJobs(); },
+      function (url) { placeJob(job, url); },
+      function (err) {
+        var stuck = String((err && err.message) || err).indexOf('слишком долго') >= 0;
+        if (stuck && !job.restarted && job.cfg) {
+          job.restarted = true;
+          job.text = 'зависла, перезапускаю…';
+          renderJobs();
+          google.script.run
+            .withSuccessHandler(function (taskId) {
+              job.taskId = taskId;
+              google.script.run.uiJobSave({
+                id: job.id, taskId: taskId, prompt: job.cfg.prompt, model: job.cfg.model, dest: job.dest
+              });
+              watchJob(job);
+            })
+            .withFailureHandler(function (e) { failJob(job, e); })
+            .uiStartGeneration(job.cfg);
+          return;
+        }
+        failJob(job, err);
       });
   }
-  el('again').onclick = insertLastImage;
+
+  function failJob(job, err) {
+    job.state = 'err';
+    job.text = (err && err.message) || String(err);
+    renderJobs();
+    if (job.id) google.script.run.uiJobDrop(job.id);
+    if (job.dest && job.dest.token) google.script.run.uiCancelTarget(job.dest.token);
+  }
+
+  function placeJob(job, url) {
+    job.text = 'вставляю…';
+    renderJobs();
+
+    lastImageUrl = url;
+    el('previewImg').src = url;
+    el('previewImg').onclick = function () { showImage(url); };
+    el('preview').style.display = 'block';
+
+    google.script.run
+      .withSuccessHandler(function () {
+        job.state = 'ok'; job.text = 'готово'; job.url = url;
+        renderJobs();
+        refreshBalance();
+        if (job.id) {
+          google.script.run
+            .withSuccessHandler(function () { google.script.run.withSuccessHandler(renderHistory).uiHistory(); })
+            .uiJobDone(job.id, { prompt: (job.cfg && job.cfg.prompt) || job.label, url: url, model: (job.cfg && job.cfg.model) || '' });
+        }
+      })
+      .withFailureHandler(function (err) {
+        job.state = 'err';
+        job.text = ((err && err.message) || String(err)) + ' — картинка в истории';
+        job.url = url;
+        renderJobs();
+        if (job.id) {
+          google.script.run.uiJobDone(job.id, { prompt: (job.cfg && job.cfg.prompt) || job.label, url: url, model: '' });
+        }
+      })
+      .uiInsertImage(url, job.dest);
+  }
+
+  function resumeJobs(saved) {
+    (saved || []).forEach(function (s) {
+      var job = {
+        n: ++jobSeq, id: s.id, label: (s.prompt || 'задача').slice(0, 30),
+        state: 'run', text: 'подхватываю…',
+        cfg: { prompt: s.prompt || '', model: s.model || '' },
+        dest: s.dest, taskId: s.taskId, restarted: true
+      };
+      JOBS.push(job);
+      watchJob(job);
+    });
+    if ((saved || []).length) {
+      renderJobs();
+      say('image', 'Нашёл незаконченные задачи с прошлого раза — довожу до конца.');
+    }
+  }
+
+  // ---------- история ----------
+  function renderHistory(list) {
+    HISTORY = list || HISTORY;
+    var box = el('histBox');
+    box.innerHTML = '';
+    if (!HISTORY.length) {
+      box.innerHTML = '<div class="muted">Пока пусто. Сюда попадают последние 20 картинок.</div>';
+      return;
+    }
+    HISTORY.forEach(function (h) {
+      var row = document.createElement('div');
+      row.className = 'it';
+      var img = document.createElement('img');
+      img.src = h.url;
+      img.onclick = function () { showImage(h.url); };
+      var tx = document.createElement('div');
+      tx.className = 'tx'; tx.textContent = h.prompt || 'без промпта'; tx.title = h.prompt || '';
+      var ins = document.createElement('span');
+      ins.className = 'ins'; ins.textContent = 'вставить';
+      ins.onclick = function () { insertUrlHere(h.url, h.prompt); };
+      row.appendChild(img); row.appendChild(tx); row.appendChild(ins);
+      box.appendChild(row);
+    });
+    var clear = document.createElement('div');
+    clear.className = 'links';
+    var a = document.createElement('a');
+    a.textContent = 'Очистить историю';
+    a.onclick = function () { google.script.run.withSuccessHandler(renderHistory).uiHistoryClear(); };
+    clear.appendChild(a);
+    box.appendChild(clear);
+  }
+
+  el('histToggle').onclick = function () {
+    var box = el('histBox');
+    var opening = box.className.indexOf('hide') >= 0;
+    box.className = opening ? 'hist' : 'hist hide';
+    if (opening) google.script.run.withSuccessHandler(renderHistory).uiHistory();
+  };
+
+  /** Вставить готовый URL в текущее место курсора. */
+  function insertUrlHere(url, prompt) {
+    var job = { n: ++jobSeq, id: newJobId(), label: prompt ? prompt.slice(0, 30) : 'из истории',
+                state: 'run', text: 'вставляю…', cfg: { prompt: prompt || '', model: '' } };
+    JOBS.push(job); renderJobs();
+    google.script.run
+      .withSuccessHandler(function (token) {
+        job.dest = { token: token, widthPercent: Number(el('width').value), caption: '' };
+        placeJob(job, url);
+      })
+      .withFailureHandler(function (err) { failJob(job, err); })
+      .uiPrepareTarget();
+  }
+
+  el('again').onclick = function () {
+    if (lastImageUrl) insertUrlHere(lastImageUrl, el('prompt').value.trim());
+  };
+
+  // ---------- помощь с промптом ----------
+  el('enhance').onclick = function () {
+    var text = el('prompt').value.trim();
+    if (!text) { say('image', 'Напиши хотя бы пару слов — разверну в полноценный промпт.', 'err'); return; }
+    el('enhance').disabled = true;
+    say('image', 'Разворачиваю промпт…');
+    google.script.run
+      .withSuccessHandler(function (res) {
+        el('enhance').disabled = false;
+        el('prompt').value = res.prompt;
+        say('image', 'Готово (' + res.credits + ' кр.). Можно править руками.', 'ok');
+      })
+      .withFailureHandler(function (err) {
+        el('enhance').disabled = false;
+        say('image', (err && err.message) || String(err), 'err');
+      })
+      .uiEnhancePrompt(text);
+  };
 
   // ---------- вкладка «Текст» ----------
   function onTextModelChange() {
@@ -839,6 +1105,10 @@
     el('balance').textContent = state.balance === null ? '' : state.balance + ' кр.';
     el('go').disabled = false;
     el('tGo').disabled = false;
+
+    HISTORY = state.history || [];
+    resumeJobs(state.jobs);
+
     if (INITIAL_TAB && INITIAL_TAB !== 'image') showTab(INITIAL_TAB);
   }
 

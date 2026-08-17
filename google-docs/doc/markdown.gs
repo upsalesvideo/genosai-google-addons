@@ -22,8 +22,8 @@ function docInsertMarkdown(markdown, opts) {
   return mdRender_(body, index, markdown);
 }
 
-/** Заменить абзац-маркер на картинку по URL. */
-function docReplaceMarker(token, url, widthPercent) {
+/** Заменить абзац-маркер на картинку по URL. caption — необязательная подпись. */
+function docReplaceMarker(token, url, widthPercent, caption) {
   var doc = DocumentApp.getActiveDocument();
   var body = doc.getBody();
   var found = body.findText(token);
@@ -40,6 +40,7 @@ function docReplaceMarker(token, url, widthPercent) {
   paragraph.clear();
   var image = paragraph.appendInlineImage(blob);
   fitImageToPage_(image, body, widthPercent);
+  if (caption) addCaption_(image, body, caption);
   return true;
 }
 

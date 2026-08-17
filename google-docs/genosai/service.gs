@@ -53,6 +53,41 @@ function genosaiKeyMasked() {
 
 // ---------- низкий уровень ----------
 
+/**
+ * Запрос с повторами: сеть отваливается, сервер отдаёт 5xx, чат упирается
+ * в лимит 15 запросов в минуту (429 с Retry-After). Без повторов всё это
+ * прилетало пользователю ошибкой.
+ */
+function genosaiFetch_(url, options, attempt) {
+  attempt = attempt || 1;
+  var MAX = 4;
+  var res;
+  try {
+    res = UrlFetchApp.fetch(url, options);
+  } catch (e) {
+    if (attempt >= MAX) throw new Error('Сеть не отвечает: ' + (e.message || e));
+    Utilities.sleep(genosaiBackoff_(attempt));
+    return genosaiFetch_(url, options, attempt + 1);
+  }
+
+  var code = res.getResponseCode();
+  var retriable = code === 429 || (code >= 500 && code < 600);
+  if (retriable && attempt < MAX) {
+    var wait = genosaiBackoff_(attempt);
+    if (code === 429) {
+      var after = Number(res.getHeaders()['Retry-After'] || res.getHeaders()['retry-after'] || 0);
+      if (after > 0) wait = Math.min(after * 1000, 30000);
+    }
+    Utilities.sleep(wait);
+    return genosaiFetch_(url, options, attempt + 1);
+  }
+  return res;
+}
+
+function genosaiBackoff_(attempt) {
+  return [1000, 3000, 7000][attempt - 1] || 7000;
+}
+
 function genosaiRequest_(method, path, body) {
   var options = {
     method: method,
@@ -64,7 +99,7 @@ function genosaiRequest_(method, path, body) {
     options.payload = JSON.stringify(body);
   }
 
-  var res = UrlFetchApp.fetch(GENOSAI_BASE_URL + path, options);
+  var res = genosaiFetch_(GENOSAI_BASE_URL + path, options);
   var code = res.getResponseCode();
   var text = res.getContentText();
   var data;
@@ -87,7 +122,7 @@ function genosaiRequest_(method, path, body) {
 function genosaiUpload_(blob) {
   // без имени с расширением сервер не понимает, что это картинка
   var named = genosaiNameBlob_(blob);
-  var res = UrlFetchApp.fetch(GENOSAI_BASE_URL + '/v1/uploads', {
+  var res = genosaiFetch_(GENOSAI_BASE_URL + '/v1/uploads', {
     method: 'post',
     headers: { Authorization: 'Bearer ' + genosaiKey_() },
     payload: { file: named },

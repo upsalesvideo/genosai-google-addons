@@ -93,7 +93,85 @@ function slidesInsertImage(url, opts) {
   if (opts.title && placement === 'full') {
     slidesTitleBand_(slide, opts.title, info.width, info.height);
   }
-  return { slideId: slide.getObjectId() };
+  // imageId нужен, чтобы можно было убрать вставленное одной кнопкой:
+  // Ctrl+Z не откатывает то, что сделал скрипт
+  return { slideId: slide.getObjectId(), imageId: image.getObjectId() };
+}
+
+/** Убрать вставленную картинку (кнопка «убрать со слайда»). */
+function slidesRemoveElement(slideId, elementId) {
+  var slide = slidesById_(slideId);
+  var elements = slide.getPageElements();
+  for (var i = 0; i < elements.length; i++) {
+    if (elements[i].getObjectId() === elementId) {
+      elements[i].remove();
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Слайд создавался под картинку, а генерация упала — убираем пустышку. */
+function slidesRemoveIfEmpty(slideId) {
+  var pres = SlidesApp.getActivePresentation();
+  if (pres.getSlides().length <= 1) return false;
+
+  var slide;
+  try {
+    slide = slidesById_(slideId);
+  } catch (e) {
+    return false;
+  }
+  var elements = slide.getPageElements();
+  for (var i = 0; i < elements.length; i++) {
+    var el = elements[i];
+    if (el.getPageElementType() !== SlidesApp.PageElementType.SHAPE) return false;
+    var text = el.asShape().getText().asString().trim();
+    if (text) return false;   // на слайде уже есть текст — не трогаем
+  }
+  slide.remove();
+  return true;
+}
+
+/** Рамка выделенной картинки — чтобы перерисовать её на том же месте. */
+function slidesSelectedImageBox() {
+  var image = slidesSelectedImage_();
+  if (!image) return null;
+  var page = image.getParentPage();
+  return {
+    slideId: page.getObjectId(),
+    elementId: image.getObjectId(),
+    left: image.getLeft(),
+    top: image.getTop(),
+    width: image.getWidth(),
+    height: image.getHeight()
+  };
+}
+
+/** Заменить картинку в той же рамке: новая встаёт ровно на место старой. */
+function slidesReplaceImage(box, url) {
+  var slide = slidesById_(box.slideId);
+  var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) {
+    throw new Error('Не удалось скачать картинку (HTTP ' + res.getResponseCode() + ').');
+  }
+  var image = slide.insertImage(slidesNormalizeBlob_(res.getBlob(), url));
+  image.setLeft(box.left).setTop(box.top).setWidth(box.width).setHeight(box.height);
+
+  slidesRemoveElement(box.slideId, box.elementId);
+  return { slideId: box.slideId, imageId: image.getObjectId() };
+}
+
+/** Весь текст текущего слайда — исходник для промпта «нарисуй к этому слайду». */
+function slidesCurrentText() {
+  var slide = slidesCurrent_();
+  var parts = [];
+  slide.getPageElements().forEach(function (el) {
+    if (el.getPageElementType() !== SlidesApp.PageElementType.SHAPE) return;
+    var text = el.asShape().getText().asString().trim();
+    if (text) parts.push(text);
+  });
+  return parts.join('\n');
 }
 
 /** Геометрия: cover для full, contain для остальных. */
