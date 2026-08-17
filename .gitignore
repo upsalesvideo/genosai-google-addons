@@ -3,6 +3,7 @@ api_key.txt
 *.key
 .clasprc.json
 .clasp.json
+.clasp*.json
 
 # служебное
 .DS_Store
