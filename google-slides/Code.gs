@@ -317,6 +317,11 @@ function uiPlaceSlideImage(slideId, url) {
   return deckPlaceImage(slideId, url);
 }
 
+/** Проба пера: пишем тестовый комментарий и честно возвращаем ответ Drive. */
+function uiTestComment() {
+  return deckAddComment(0, 'проверка связи', 'Если вы это читаете — комментарии работают.');
+}
+
 // ---------- история слайдов ----------
 
 function uiDeckHistory() {

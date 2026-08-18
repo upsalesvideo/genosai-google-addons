@@ -138,6 +138,7 @@
     <button class="act" id="saveKey">Сохранить ключ</button>
     <button class="sec" id="checkBalance">Проверить кредиты</button>
     <button class="sec" id="selfTest">Диагностика (~1 кредит)</button>
+    <button class="sec" id="testComment">Проверить комментарии</button>
     <div class="status" id="st-settings"></div>
     <div class="jobs" id="testReport"></div>
     <button class="sec" id="closeSettings">Закрыть настройки</button>
@@ -468,6 +469,25 @@
       .uiCheckBalance();
   };
 
+
+  el('testComment').onclick = function () {
+    el('testComment').disabled = true;
+    say('settings', 'Пробую записать комментарий в эту презентацию…');
+    google.script.run
+      .withSuccessHandler(function (res) {
+        el('testComment').disabled = false;
+        say('settings', res.ok
+          ? 'Комментарии работают: тестовый комментарий записан, можно удалить его в панели комментариев.'
+          : 'Комментарии недоступны.\n' + res.error +
+            '\n\nЕсли видишь 403 — переоткрой панель и выдай разрешение на Google Диск.',
+          res.ok ? 'ok' : 'err');
+      })
+      .withFailureHandler(function (err) {
+        el('testComment').disabled = false;
+        say('settings', (err && err.message) || String(err), 'err');
+      })
+      .uiTestComment();
+  };
 
   el('selfTest').onclick = function () {
     el('selfTest').disabled = true;
@@ -1334,38 +1354,55 @@
     return parts.join(' ');
   }
 
-  var PLAN_LABELS = { title: 'Заголовок', bullets: 'Текст на слайде', visual: 'Промпт для слайда', speak: 'Речь докладчика' };
+  var PLAN_LABELS = { title: 'ЗАГОЛОВОК', bullets: 'ТЕКСТ НА СЛАЙДЕ', visual: 'ПРОМПТ ДЛЯ СЛАЙДА' };
 
-  /** Слайд одним читаемым блоком: подписи и значения построчно. */
+  /** То, что уходит в промпт, — одним блоком с подписями в скобках. */
   function specToText(spec) {
     var nl = String.fromCharCode(10);
-    return PLAN_LABELS.title + ': ' + (spec.title || '') + nl +
-           PLAN_LABELS.bullets + ': ' + (spec.bullets || []).join('; ') + nl +
-           PLAN_LABELS.visual + ': ' + (spec.visual || '') + nl +
-           PLAN_LABELS.speak + ': ' + (spec.speak || '');
+    return '[' + PLAN_LABELS.title + '] ' + (spec.title || '') + nl + nl +
+           '[' + PLAN_LABELS.bullets + '] ' + (spec.bullets || []).join('; ') + nl + nl +
+           '[' + PLAN_LABELS.visual + '] ' + (spec.visual || '');
   }
 
-  /** Разбор того же блока обратно — пользователь правит текст как хочет. */
+  /** Разбор блока обратно: ориентируемся на подписи в квадратных скобках. */
   function textToSpec(text, spec) {
     var nl = String.fromCharCode(10);
+    var buf = { title: [], bullets: [], visual: [] };
     var current = null;
-    var buf = { title: [], bullets: [], visual: [], speak: [] };
     String(text || '').split(nl).forEach(function (line) {
-      var hit = null;
       Object.keys(PLAN_LABELS).forEach(function (key) {
-        if (hit) return;
-        var prefix = PLAN_LABELS[key] + ':';
-        if (line.indexOf(prefix) === 0) { hit = key; line = line.slice(prefix.length).trim(); }
+        var mark = '[' + PLAN_LABELS[key] + ']';
+        var at = line.indexOf(mark);
+        if (at >= 0) { current = key; line = line.slice(at + mark.length).trim(); }
       });
-      if (hit) current = hit;
       if (current) buf[current].push(line);
     });
     spec.title = buf.title.join(' ').trim();
     spec.visual = buf.visual.join(' ').trim();
-    spec.speak = buf.speak.join(' ').trim();
     spec.bullets = buf.bullets.join(' ').split(';')
       .map(function (x) { return x.trim(); }).filter(Boolean);
     return spec;
+  }
+
+  /** Два поля на слайд: промпт-блок и отдельно речь докладчика. */
+  function slideEditor(spec, container) {
+    var box = document.createElement('textarea');
+    box.style.minHeight = '124px';
+    box.value = specToText(spec);
+    box.oninput = function () { textToSpec(box.value, spec); };
+    container.appendChild(box);
+
+    var cap = document.createElement('div');
+    cap.className = 'muted';
+    cap.style.marginTop = '6px';
+    cap.textContent = 'Речь докладчика — уходит в комментарий, не в промпт:';
+    container.appendChild(cap);
+
+    var speak = document.createElement('textarea');
+    speak.style.minHeight = '86px';
+    speak.value = spec.speak || '';
+    speak.oninput = function () { spec.speak = speak.value; };
+    container.appendChild(speak);
   }
 
   function renderPlan(credits) {
@@ -1397,12 +1434,7 @@
       hd.appendChild(num); hd.appendChild(del);
       card.appendChild(hd);
 
-      var box = document.createElement('textarea');
-      box.style.minHeight = '132px';
-      box.value = specToText(spec);
-      box.oninput = function () { textToSpec(box.value, spec); };
-      card.appendChild(box);
-
+      slideEditor(spec, card);
       list.appendChild(card);
     });
   }
@@ -1473,7 +1505,7 @@
             google.script.run
               .withSuccessHandler(function (res) {
                 if (res && res.ok) return;
-                commentFailed = true;
+                commentFailed = res && res.error ? res.error : true;
                 google.script.run.uiAddNotes(canvas.slideId, spec.speak);
               })
               .withFailureHandler(function () {
@@ -1533,7 +1565,7 @@
       el('deckForm').className = '';
 
       var tail = commentFailed
-        ? ' Комментарии недоступны — сценарий положил в заметки докладчика.'
+        ? ' Комментарии не записались (' + commentFailed + ') — сценарий ушёл в заметки докладчика.'
         : ' Сценарий каждого слайда — в комментариях.';
       say('deck', (failures
         ? 'Готово: ' + total + ' слайдов, с проблемами ' + failures + '.'
@@ -1574,11 +1606,7 @@
       var body = document.createElement('div');
       body.className = 'hide';
 
-      var editor = document.createElement('textarea');
-      editor.style.minHeight = '132px';
-      editor.value = specToText(rec);
-      editor.oninput = function () { textToSpec(editor.value, rec); };
-      body.appendChild(editor);
+      slideEditor(rec, body);
 
       var redraw = document.createElement('button');
       redraw.className = 'sec mini';
