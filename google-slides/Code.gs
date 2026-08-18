@@ -99,6 +99,7 @@ function uiGetState() {
     key: uiKeyInfo(),
     jobs: jobsList(),          // незаконченные задачи — сайдбар их подхватит
     history: historyList(),
+    deckHistory: deckHistory(),
     balance: null
   };
   try {
@@ -289,14 +290,49 @@ function uiPlanDeck(params) {
   return deckPlan(params);
 }
 
-/** Создать слайд по плану. → slideId */
-function uiCreateSlide(spec, position) {
-  return slidesCreateSlide(spec, position);
-}
-
 /** Картинка не сгенерилась — поставить на слайд хотя бы заголовок. */
 function uiSlideTitleOnly(slideId, title) {
   return slidesTitleOnly(slideId, title);
+}
+
+// ---------- сборка колоды ----------
+
+/** Пустые холсты под все слайды сразу. → [{num, slideId}] */
+function uiCreateCanvases(specs) {
+  return deckCreateCanvases(specs);
+}
+
+/** Сценарий слайда — в комментарий к презентации. → {ok} либо {ok:false, error} */
+function uiAddComment(slideNumber, title, speak) {
+  return deckAddComment(slideNumber, title, speak);
+}
+
+/** Запасной путь, если комментарии недоступны: заметки докладчика. */
+function uiAddNotes(slideId, speak) {
+  return deckAddNotes(slideId, speak);
+}
+
+/** Поставить картинку на слайд, убрав старую. */
+function uiPlaceSlideImage(slideId, url) {
+  return deckPlaceImage(slideId, url);
+}
+
+// ---------- история слайдов ----------
+
+function uiDeckHistory() {
+  return deckHistory();
+}
+
+function uiDeckHistorySave(list) {
+  return deckHistorySave(list);
+}
+
+function uiDeckHistoryPatch(slideId, fields) {
+  return deckHistoryPatch(slideId, fields);
+}
+
+function uiDeckHistoryClear() {
+  return deckHistoryClear();
 }
 
 // ---------- вкладка «Чат» ----------

@@ -319,7 +319,7 @@
         </div>
 
         <div class="muted" style="margin-top:10px">Каждый слайд рисуется целиком одной картинкой:
-        заголовок, тезисы и иллюстрация в едином дизайне. Речь докладчика уходит в заметки спикера.</div>
+        заголовок, тезисы и иллюстрация в едином дизайне. Речь докладчика уходит в комментарии к слайду — их удобно читать сбоку.</div>
 
       <label for="dMode">Что делать с презентацией</label>
         <select id="dMode">
@@ -366,6 +366,10 @@
 
       <div class="bar" id="dBar"><i id="dBarFill"></i></div>
       <div class="status" id="st-deck"></div>
+
+      <div class="links"><b style="color:var(--muted);font-size:11px">История слайдов</b>
+        <a id="deckSlidesClear" style="float:right">Очистить</a></div>
+      <div id="deckSlides"></div>
     </div>
   </div>
 
@@ -1330,10 +1334,44 @@
     return parts.join(' ');
   }
 
+  var PLAN_LABELS = { title: 'Заголовок', bullets: 'Текст на слайде', visual: 'Промпт для слайда', speak: 'Речь докладчика' };
+
+  /** Слайд одним читаемым блоком: подписи и значения построчно. */
+  function specToText(spec) {
+    var nl = String.fromCharCode(10);
+    return PLAN_LABELS.title + ': ' + (spec.title || '') + nl +
+           PLAN_LABELS.bullets + ': ' + (spec.bullets || []).join('; ') + nl +
+           PLAN_LABELS.visual + ': ' + (spec.visual || '') + nl +
+           PLAN_LABELS.speak + ': ' + (spec.speak || '');
+  }
+
+  /** Разбор того же блока обратно — пользователь правит текст как хочет. */
+  function textToSpec(text, spec) {
+    var nl = String.fromCharCode(10);
+    var current = null;
+    var buf = { title: [], bullets: [], visual: [], speak: [] };
+    String(text || '').split(nl).forEach(function (line) {
+      var hit = null;
+      Object.keys(PLAN_LABELS).forEach(function (key) {
+        if (hit) return;
+        var prefix = PLAN_LABELS[key] + ':';
+        if (line.indexOf(prefix) === 0) { hit = key; line = line.slice(prefix.length).trim(); }
+      });
+      if (hit) current = hit;
+      if (current) buf[current].push(line);
+    });
+    spec.title = buf.title.join(' ').trim();
+    spec.visual = buf.visual.join(' ').trim();
+    spec.speak = buf.speak.join(' ').trim();
+    spec.bullets = buf.bullets.join(' ').split(';')
+      .map(function (x) { return x.trim(); }).filter(Boolean);
+    return spec;
+  }
+
   function renderPlan(credits) {
     el('deckForm').className = 'hide';
     el('deckPlan').className = '';
-    // смета: каждый слайд — одна картинка
+
     var style = activeStyle();
     var imodel = modelById((style && style.model) || DEFAULTS.model);
     var cost = imodel && imodel.cost ? PLAN.length * imodel.cost : 0;
@@ -1341,8 +1379,7 @@
 
     el('planHead').textContent = 'План: ' + PLAN.length + ' слайд(ов), текст стоил ' + credits + ' кр. ' +
       'Отрисовка: ' + PLAN.length + ' × ' + (imodel ? imodel.cost : '?') + ' = ~' + cost + ' кр.' +
-      (balance ? ' Баланс: ' + balance + (cost > balance ? ' — не хватит!' : '') : '') +
-      ' Правь прямо здесь.';
+      (balance ? ' Баланс: ' + balance + (cost > balance ? ' — не хватит!' : '') : '');
 
     var list = el('planList');
     list.innerHTML = '';
@@ -1360,30 +1397,11 @@
       hd.appendChild(num); hd.appendChild(del);
       card.appendChild(hd);
 
-      var title = document.createElement('input');
-      title.type = 'text'; title.value = spec.title || ''; title.placeholder = 'Заголовок';
-      title.oninput = function () { spec.title = title.value; };
-      card.appendChild(title);
-
-      var bullets = document.createElement('textarea');
-      bullets.value = (spec.bullets || []).join(String.fromCharCode(10));
-      bullets.placeholder = idx === 0 ? 'Подзаголовок' : 'Тезисы на слайде, каждый с новой строки';
-      bullets.oninput = function () {
-        spec.bullets = bullets.value.split(String.fromCharCode(10)).map(function (x) { return x.trim(); }).filter(Boolean);
-      };
-      card.appendChild(bullets);
-
-      var visual = document.createElement('textarea');
-      visual.value = spec.visual || '';
-      visual.placeholder = 'Идея иллюстрации (по-русски)';
-      visual.oninput = function () { spec.visual = visual.value; };
-      card.appendChild(visual);
-
-      var speak = document.createElement('textarea');
-      speak.value = spec.speak || '';
-      speak.placeholder = 'Речь докладчика — уйдёт в заметки спикера';
-      speak.oninput = function () { spec.speak = speak.value; };
-      card.appendChild(speak);
+      var box = document.createElement('textarea');
+      box.style.minHeight = '132px';
+      box.value = specToText(spec);
+      box.oninput = function () { textToSpec(box.value, spec); };
+      card.appendChild(box);
 
       list.appendChild(card);
     });
@@ -1416,73 +1434,221 @@
     }
   };
 
+  /**
+   * Сборка колоды: холсты создаются сразу все, промпты уходят в Genosai с шагом
+   * в секунду (параллельно), каждая готовая картинка тут же садится на свой слайд.
+   */
   function buildDeck() {
     var style = activeStyle();
     var imageModelId = (style && style.model) || DEFAULTS.model;
     var imageModel = modelById(imageModelId);
-    var i = 0, failures = 0;
+    var total = PLAN.length;
+    var done = 0, failures = 0, commentFailed = false;
+    var records = [];
 
-    function finish() {
-      function done() {
-        el('planApply').disabled = false; el('planApply').textContent = 'Вставить в презентацию';
-        el('deckPlan').className = 'hide';
-        el('deckForm').className = '';
-        progress(1, 1);
-        say('deck', failures
-          ? 'Готово: ' + PLAN.length + ' слайдов, не отрисовалось ' + failures + ' — на них остался заголовок.'
-          : 'Готово: ' + PLAN.length + ' слайдов. Речь докладчика — в заметках спикера.', 'ok');
-        refreshBalance();
-      }
-      if (PLAN_CTX.mode === 'fresh' && PLAN_CTX.oldIds && PLAN_CTX.oldIds.length) {
-        say('deck', 'Убираю старые слайды…');
-        google.script.run.withSuccessHandler(done).withFailureHandler(done).uiRemoveSlides(PLAN_CTX.oldIds);
-      } else {
-        done();
-      }
-    }
+    el('planApply').disabled = true; el('planApply').textContent = 'Собираю…';
+    say('deck', 'Создаю ' + total + ' слайд(ов)…');
 
-    function next() {
-      if (i >= PLAN.length) { finish(); return; }
-      var spec = PLAN[i];
-      progress(i, PLAN.length);
-      say('deck', 'Слайд ' + (i + 1) + ' из ' + PLAN.length + ': рисую целиком…');
-
-      google.script.run
-        .withSuccessHandler(function (slideId) {
-          generateImage({
-            model: imageModelId,
-            prompt: composeRenderPrompt(spec, i === 0),
-            aspectRatio: bestAspect(imageModel, DECK.ratio || 16 / 9) || DEFAULTS.aspect,
-            resolution: DEFAULTS.resolution,
-            styleId: ACTIVE_STYLE_ID,
-            maxRefs: (imageModel && imageModel.maxRefs) || 1
-          },
-          null,
-          function (url) {
-            google.script.run
-              .withSuccessHandler(function () { i++; next(); })
-              .withFailureHandler(function () { failures++; i++; next(); })
-              .uiInsertImage(url, { slideId: slideId, placement: 'full' });
-          },
-          function () {
-            failures++;
-            if (spec.title) {
-              google.script.run
-                .withSuccessHandler(function () { i++; next(); })
-                .withFailureHandler(function () { i++; next(); })
-                .uiSlideTitleOnly(slideId, spec.title);
-            } else { i++; next(); }
-          });
-        })
-        .withFailureHandler(function (err) {
+    google.script.run
+      .withSuccessHandler(function (canvases) {
+        if (!canvases || !canvases.length || canvases.length < total) {
           el('planApply').disabled = false; el('planApply').textContent = 'Вставить в презентацию';
-          say('deck', (err && err.message) || String(err), 'err');
-        })
-        .uiCreateSlide({ layout: 'render', speak: spec.speak || '' }, 'end');
+          say('deck', 'Не удалось создать слайды под колоду — попробуй ещё раз.', 'err');
+          return;
+        }
+        say('deck', 'Слайды на месте, запускаю отрисовку…');
+        progress(0, total);
+
+        PLAN.forEach(function (spec, idx) {
+          var canvas = canvases[idx];
+          if (!canvas) return;
+          var prompt = composeRenderPrompt(spec, idx === 0);
+          records.push({
+            num: idx + 1, slideId: canvas.slideId, title: spec.title, bullets: spec.bullets,
+            visual: spec.visual, speak: spec.speak, prompt: prompt, url: ''
+          });
+
+          // сценарий — в комментарий к слайду; не вышло — в заметки докладчика
+          if (spec.speak) {
+            google.script.run
+              .withSuccessHandler(function (res) {
+                if (res && res.ok) return;
+                commentFailed = true;
+                google.script.run.uiAddNotes(canvas.slideId, spec.speak);
+              })
+              .withFailureHandler(function () {
+                commentFailed = true;
+                google.script.run.uiAddNotes(canvas.slideId, spec.speak);
+              })
+              .uiAddComment(idx + 1, spec.title, spec.speak);
+          }
+
+          // шаг в секунду: очередь Genosai принимает пачку без отказов
+          setTimeout(function () {
+            generateImage({
+              model: imageModelId,
+              prompt: prompt,
+              aspectRatio: bestAspect(imageModel, DECK.ratio || 16 / 9) || DEFAULTS.aspect,
+              resolution: DEFAULTS.resolution,
+              styleId: ACTIVE_STYLE_ID,
+              maxRefs: (imageModel && imageModel.maxRefs) || 1
+            },
+            null,
+            function (url) {
+              // картинка готова — сразу на свой слайд, не дожидаясь соседей
+              google.script.run
+                .withSuccessHandler(function () {
+                  records[idx].url = url;
+                  tick('Слайд ' + (idx + 1) + ' готов');
+                })
+                .withFailureHandler(function () { failures++; tick('Слайд ' + (idx + 1) + ': не вставился'); })
+                .uiPlaceSlideImage(canvas.slideId, url);
+            },
+            function () {
+              failures++;
+              if (spec.title) google.script.run.uiSlideTitleOnly(canvas.slideId, spec.title);
+              tick('Слайд ' + (idx + 1) + ': не нарисовался');
+            });
+          }, idx * 1000);
+        });
+      })
+      .withFailureHandler(function (err) {
+        el('planApply').disabled = false; el('planApply').textContent = 'Вставить в презентацию';
+        say('deck', (err && err.message) || String(err), 'err');
+      })
+      .uiCreateCanvases(PLAN.map(function (spec) { return { speak: spec.speak || '' }; }));
+
+    function tick(message) {
+      done++;
+      progress(done, total);
+      say('deck', message + '. Готово ' + done + ' из ' + total + '…');
+      if (done < total) return;
+
+      DECK_SLIDES = records;
+      google.script.run.uiDeckHistorySave(records);
+      renderDeckHistory(records);
+
+      el('planApply').disabled = false; el('planApply').textContent = 'Вставить в презентацию';
+      el('deckPlan').className = 'hide';
+      el('deckForm').className = '';
+
+      var tail = commentFailed
+        ? ' Комментарии недоступны — сценарий положил в заметки докладчика.'
+        : ' Сценарий каждого слайда — в комментариях.';
+      say('deck', (failures
+        ? 'Готово: ' + total + ' слайдов, с проблемами ' + failures + '.'
+        : 'Готово: ' + total + ' слайдов.') + tail, 'ok');
+      refreshBalance();
+
+      if (PLAN_CTX.mode === 'fresh' && PLAN_CTX.oldIds && PLAN_CTX.oldIds.length) {
+        google.script.run.uiRemoveSlides(PLAN_CTX.oldIds);
+      }
     }
-    next();
   }
 
+  // ---------- история слайдов: открыть и поправить руками ----------
+  var DECK_SLIDES = [];
+
+  function renderDeckHistory(list) {
+    DECK_SLIDES = list || DECK_SLIDES;
+    var box = el('deckSlides');
+    box.innerHTML = '';
+    if (!DECK_SLIDES.length) {
+      box.innerHTML = '<div class="muted">Здесь появятся слайды последней сборки — можно открыть и перерисовать.</div>';
+      return;
+    }
+
+    DECK_SLIDES.forEach(function (rec) {
+      var card = document.createElement('div');
+      card.className = 'slidecard';
+
+      var hd = document.createElement('div');
+      hd.className = 'hd';
+      var num = document.createElement('b');
+      num.textContent = 'Слайд ' + rec.num + (rec.title ? ' — ' + rec.title : '');
+      var toggle = document.createElement('i');
+      toggle.textContent = '▾'; toggle.title = 'Открыть и поправить';
+      hd.appendChild(num); hd.appendChild(toggle);
+      card.appendChild(hd);
+
+      var body = document.createElement('div');
+      body.className = 'hide';
+
+      var editor = document.createElement('textarea');
+      editor.style.minHeight = '132px';
+      editor.value = specToText(rec);
+      editor.oninput = function () { textToSpec(editor.value, rec); };
+      body.appendChild(editor);
+
+      var redraw = document.createElement('button');
+      redraw.className = 'sec mini';
+      redraw.textContent = 'Перерисовать слайд';
+      redraw.onclick = function () {
+        var style = activeStyle();
+        var modelId = (style && style.model) || DEFAULTS.model;
+        var model = modelById(modelId);
+        redraw.disabled = true; redraw.textContent = 'Рисую…';
+        rec.prompt = composeRenderPrompt(rec, rec.num === 1);
+
+        generateImage({
+          model: modelId,
+          prompt: rec.prompt,
+          aspectRatio: bestAspect(model, DECK.ratio || 16 / 9) || DEFAULTS.aspect,
+          resolution: DEFAULTS.resolution,
+          styleId: ACTIVE_STYLE_ID,
+          maxRefs: (model && model.maxRefs) || 1
+        },
+        null,
+        function (url) {
+          google.script.run
+            .withSuccessHandler(function () {
+              rec.url = url;
+              redraw.disabled = false; redraw.textContent = 'Перерисовать слайд';
+              google.script.run.uiDeckHistoryPatch(rec.slideId, {
+                title: rec.title, bullets: rec.bullets, visual: rec.visual,
+                speak: rec.speak, prompt: rec.prompt, url: url
+              });
+              say('deck', 'Слайд ' + rec.num + ' перерисован.', 'ok');
+              refreshBalance();
+            })
+            .withFailureHandler(function (err) {
+              redraw.disabled = false; redraw.textContent = 'Перерисовать слайд';
+              say('deck', (err && err.message) || String(err), 'err');
+            })
+            .uiPlaceSlideImage(rec.slideId, url);
+        },
+        function (err) {
+          redraw.disabled = false; redraw.textContent = 'Перерисовать слайд';
+          say('deck', (err && err.message) || String(err), 'err');
+        });
+      };
+      body.appendChild(redraw);
+
+      if (rec.url) {
+        var look = document.createElement('div');
+        look.className = 'links';
+        var a = document.createElement('a');
+        a.textContent = 'Посмотреть картинку';
+        a.onclick = function () { showImage(rec.url); };
+        look.appendChild(a);
+        body.appendChild(look);
+      }
+
+      card.appendChild(body);
+      toggle.onclick = function () {
+        var opening = body.className.indexOf('hide') >= 0;
+        body.className = opening ? '' : 'hide';
+        toggle.textContent = opening ? '▴' : '▾';
+      };
+      box.appendChild(card);
+    });
+  }
+
+  el('deckSlidesClear').onclick = function () {
+    google.script.run
+      .withSuccessHandler(function () { DECK_SLIDES = []; renderDeckHistory([]); })
+      .uiDeckHistoryClear();
+  };
 
   // ---------- дорисовка картинок к готовым слайдам ----------
   var FILL_LIST = [];
@@ -1727,6 +1893,7 @@
     el('dGo').disabled = false;
 
     HISTORY = state.history || [];
+    renderDeckHistory(state.deckHistory || []);
     resumeJobs(state.jobs);
 
     if (INITIAL_TAB && INITIAL_TAB !== 'image') showTab(INITIAL_TAB);
