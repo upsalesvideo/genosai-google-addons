@@ -334,7 +334,7 @@
       <div id="deckPlan" class="hide">
         <div class="muted" id="planHead"></div>
         <div id="planList"></div>
-        <button class="act" id="planApply">Вставить в презентацию</button>
+        <button class="act" id="planApply">Создать слайды</button>
         <button class="sec" id="planRedo">Переписать план заново</button>
         <a class="links" id="planCancel" style="display:block">Отменить</a>
       </div>
@@ -549,6 +549,24 @@
     return best;
   }
 
+  /**
+   * Формат и качество понимают не все модели: у nano-banana-pro-1k, например,
+   * нет ни того, ни другого, и лишний параметр валит запрос с
+   * «input.aspect_ratio is not supported for this model».
+   */
+  function modelParams(model, ratio) {
+    var out = {};
+    if (model && model.aspectRatios && model.aspectRatios.length) {
+      out.aspectRatio = bestAspect(model, ratio) || model.aspectDefault || '';
+    }
+    if (model && model.resolutions && model.resolutions.length) {
+      out.resolution = model.resolutions.indexOf(DEFAULTS.resolution) >= 0
+        ? DEFAULTS.resolution
+        : (model.resolutionDefault || '');
+    }
+    return out;
+  }
+
   function applyAutoAspect() {
     var m = modelById(el('model').value);
     if (!m) return;
@@ -697,6 +715,11 @@
     STYLE_REFS.length = 0;
     (st.refs || []).forEach(function (r) { STYLE_REFS.push(r); });
     renderChips('stRefList', STYLE_REFS);
+    updateStyleRefHint();
+  }
+
+  /** Подсказка про лимит эталонов у выбранной модели. */
+  function updateStyleRefHint() {
     var m = modelById(el('stModel').value);
     el('stRefHint').textContent = m && m.maxRefs ? '— до ' + m.maxRefs + ' шт.' : '— модель не принимает эталоны';
   }
@@ -789,16 +812,17 @@
         el('stSample').disabled = false;
         say('style', (err && err.message) || String(err), 'err');
       })
-      .uiStartGeneration({
-        model: model,
-        prompt: STYLE_SAMPLE_SCENE + '. Style: ' + desc,
-        aspectRatio: '16:9',
-        resolution: '1K',
-        styleId: 'none',
-        useSelection: false,
-        referenceUrls: refsUrls(STYLE_REFS),
-        maxRefs: 4
-      });
+      .uiStartGeneration((function () {
+        var m = modelById(model);
+        var cfg = modelParams(m, 16 / 9);
+        cfg.model = model;
+        cfg.prompt = STYLE_SAMPLE_SCENE + '. Style: ' + desc;
+        cfg.styleId = 'none';
+        cfg.useSelection = false;
+        cfg.referenceUrls = refsUrls(STYLE_REFS);
+        cfg.maxRefs = 4;
+        return cfg;
+      })());
   };
 
   // ---------- движок генерации ----------
@@ -1293,7 +1317,7 @@
         PLAN = plan.slides;
         PLAN_CTX = { mode: el('dMode').value };
         renderPlan(plan.credits);
-        say('deck', 'Проверьте текст и нажмите «Вставить в презентацию».');
+        say('deck', 'Проверьте текст и нажмите «Создать слайды».');
       })
       .withFailureHandler(function (err) {
         el('dGo').disabled = false; el('dGo').textContent = 'Собрать презентацию';
@@ -1490,7 +1514,7 @@
     google.script.run
       .withSuccessHandler(function (canvases) {
         if (!canvases || !canvases.length || canvases.length < total) {
-          el('planApply').disabled = false; el('planApply').textContent = 'Вставить в презентацию';
+          el('planApply').disabled = false; el('planApply').textContent = 'Создать слайды';
           say('deck', 'Не удалось создать слайды под колоду — попробуй ещё раз.', 'err');
           return;
         }
@@ -1526,14 +1550,12 @@
           // шаг в секунду: очередь Genosai принимает пачку без отказов
           setTimeout(function () {
             deckJob(idx, 'рисую…');
-            generateImage({
-              model: imageModelId,
-              prompt: prompt,
-              aspectRatio: bestAspect(imageModel, DECK.ratio || 16 / 9) || DEFAULTS.aspect,
-              resolution: DEFAULTS.resolution,
-              styleId: ACTIVE_STYLE_ID,
-              maxRefs: (imageModel && imageModel.maxRefs) || 1
-            },
+            var cfg = modelParams(imageModel, DECK.ratio || 16 / 9);
+            cfg.model = imageModelId;
+            cfg.prompt = prompt;
+            cfg.styleId = ACTIVE_STYLE_ID;
+            cfg.maxRefs = (imageModel && imageModel.maxRefs) || 1;
+            generateImage(cfg,
             null,
             function (url) {
               // картинка готова — сразу на свой слайд, не дожидаясь соседей
@@ -1561,7 +1583,7 @@
         });
       })
       .withFailureHandler(function (err) {
-        el('planApply').disabled = false; el('planApply').textContent = 'Вставить в презентацию';
+        el('planApply').disabled = false; el('planApply').textContent = 'Создать слайды';
         say('deck', (err && err.message) || String(err), 'err');
       })
       .uiCreateCanvases(PLAN.map(function (spec) { return { speak: spec.speak || '' }; }));
@@ -1576,7 +1598,7 @@
       google.script.run.uiDeckHistorySave(records);
       renderDeckHistory(records);
 
-      el('planApply').disabled = false; el('planApply').textContent = 'Вставить в презентацию';
+      el('planApply').disabled = false; el('planApply').textContent = 'Создать слайды';
       el('deckPlan').className = 'hide';
       el('deckForm').className = '';
 
@@ -1634,14 +1656,12 @@
         redraw.disabled = true; redraw.textContent = 'Рисую…';
         rec.prompt = composeRenderPrompt(rec, rec.num === 1);
 
-        generateImage({
-          model: modelId,
-          prompt: rec.prompt,
-          aspectRatio: bestAspect(model, DECK.ratio || 16 / 9) || DEFAULTS.aspect,
-          resolution: DEFAULTS.resolution,
-          styleId: ACTIVE_STYLE_ID,
-          maxRefs: (model && model.maxRefs) || 1
-        },
+        var cfg = modelParams(model, DECK.ratio || 16 / 9);
+        cfg.model = modelId;
+        cfg.prompt = rec.prompt;
+        cfg.styleId = ACTIVE_STYLE_ID;
+        cfg.maxRefs = (model && model.maxRefs) || 1;
+        generateImage(cfg,
         null,
         function (url) {
           google.script.run
@@ -1829,7 +1849,7 @@
 
     el('model').onchange = function () { applyAutoAspect(); onModelRefs(); };
     el('placement').onchange = applyAutoAspect;
-    el('stModel').onchange = loadStyleForm;
+    el('stModel').onchange = updateStyleRefHint;   // перезагружать форму нельзя: выбор модели сбрасывался
 
     // значения по умолчанию
     if (modelById(DEFAULTS.model)) el('model').value = DEFAULTS.model;
