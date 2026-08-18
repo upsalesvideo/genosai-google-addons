@@ -296,12 +296,19 @@ function slidesTitleBand_(slide, title, W, H) {
 
 /**
  * Создать слайд с текстом.
- * spec: {layout: 'full'|'split'|'text', title, bullets[]}
+ * spec: {layout: 'render'|'full'|'split'|'text', title, bullets[], speak}
  * → slideId
  */
 function slidesCreateSlide(spec, position) {
   var layout = spec.layout || 'text';
   var info = slidesDeckInfo();
+
+  if (layout === 'render') {
+    // слайд целиком нарисует модель — здесь только пустой холст и заметки докладчика
+    var canvas = slidesAppendSlide_('blank', position);
+    if (spec.speak) slidesSetNotes_(canvas, spec.speak);
+    return canvas.getObjectId();
+  }
 
   if (layout === 'full') {
     // текст ляжет плашкой поверх картинки — слайд оставляем пустым
@@ -348,6 +355,14 @@ function slidesTitleOnly(slideId, title) {
     box.setContentAlignment(SlidesApp.ContentAlignment.MIDDLE);
   } catch (e) { /* не критично */ }
   return true;
+}
+
+/** Заметки докладчика: «что рассказывать» с плана презентации. */
+function slidesSetNotes_(slide, text) {
+  try {
+    var shape = slide.getNotesPage().getSpeakerNotesShape();
+    if (shape) shape.getText().setText(String(text || ''));
+  } catch (e) { /* заметки — приятный бонус, не роняем сборку */ }
 }
 
 function slidesPlaceholder_(slide, types) {

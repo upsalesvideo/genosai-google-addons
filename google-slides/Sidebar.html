@@ -8,11 +8,9 @@
     .muted { color: var(--muted); font-size: 11px; }
     .hide { display: none !important; }
 
-    /* Название агента уже есть в шапке самой панели Google — здесь только баланс и шестерёнка */
-    .head { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-height: 26px; }
-    .icon { border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer;
-      width: 26px; height: 26px; font-size: 14px; line-height: 1; padding: 0; flex: none; }
-    .icon:hover { border-color: var(--accent); }
+    .tabs .icon { flex: none; width: 30px; border: 2px solid transparent; border-radius: 6px;
+      background: transparent; cursor: pointer; font-size: 14px; line-height: 1; padding: 0; color: var(--muted); }
+    .tabs .icon:hover { background: #fff; color: var(--accent); }
 
     .tabs { display: flex; gap: 2px; background: var(--bg); border-radius: 8px; padding: 3px; margin: 10px 0 4px; }
     .tabs button { flex: 1; padding: 5px 3px; border: 2px solid transparent; border-radius: 6px;
@@ -131,13 +129,9 @@
   </style>
 </head>
 <body>
-  <div class="head">
-    <span class="muted" id="balance"></span>
-    <button class="icon" id="gear" title="Настройки">⚙</button>
-  </div>
-
   <!-- ================= НАСТРОЙКИ ================= -->
   <div id="settings" class="hide">
+    <div class="muted" style="margin-top:6px">Кредитов на балансе: <b id="balance">…</b></div>
     <label for="apiKey">API-ключ Genosai</label>
     <input type="text" id="apiKey" placeholder="sdk_live_…">
     <div class="muted" id="keyState"></div>
@@ -159,6 +153,7 @@
       <button data-tab="style">Стиль</button>
       <button data-tab="deck">Презентация</button>
       <button data-tab="chat">Чат</button>
+      <button class="icon" id="gear" title="Настройки и кредиты">⚙</button>
     </div>
 
     <!-- ================= ЧАТ ================= -->
@@ -323,13 +318,14 @@
           </div>
         </div>
 
-        <label for="dMode">Что делать с презентацией</label>
+        <div class="muted" style="margin-top:10px">Каждый слайд рисуется целиком одной картинкой:
+        заголовок, тезисы и иллюстрация в едином дизайне. Речь докладчика уходит в заметки спикера.</div>
+
+      <label for="dMode">Что делать с презентацией</label>
         <select id="dMode">
           <option value="append">Добавить новые слайды в конец</option>
           <option value="fresh">Создать с нуля (старые слайды удалить)</option>
         </select>
-
-        <label class="check"><input type="checkbox" id="dImages" checked> Рисовать картинки в выбранном стиле</label>
 
         <button class="act" id="dGo" disabled>Собрать презентацию</button>
 
@@ -432,6 +428,7 @@
     google.script.run.withSuccessHandler(function (info) {
       el('keyState').textContent = info.hasKey ? 'Сейчас используется ключ ' + info.masked : 'Ключ ещё не задан.';
     }).uiKeyInfo();
+    refreshBalance();   // кредиты живут здесь, в настройках
   }
   function closeSettings() {
     el('settings').className = 'hide';
@@ -526,7 +523,7 @@
 
   function refreshBalance() {
     google.script.run.withSuccessHandler(function (b) {
-      el('balance').textContent = b + ' кр.';
+      el('balance').textContent = b;
     }).uiGetBalance();
   }
 
@@ -1291,7 +1288,7 @@
       .withSuccessHandler(function (plan) {
         el('dGo').disabled = false; el('dGo').textContent = 'Собрать презентацию';
         PLAN = plan.slides;
-        PLAN_CTX = { withImages: el('dImages').checked, mode: el('dMode').value };
+        PLAN_CTX = { mode: el('dMode').value };
         renderPlan(plan.credits);
         say('deck', 'Проверьте текст и нажмите «Вставить в презентацию».');
       })
@@ -1303,31 +1300,49 @@
         topic: topic,
         slidesCount: Number(el('dCount').value) || 8,
         model: el('dModel').value,
-        withImages: el('dImages').checked,
         styleId: ACTIVE_STYLE_ID
       });
   };
 
-  var LAYOUT_NAMES = { full: 'Картинка на весь слайд', split: 'Текст + картинка справа', text: 'Только текст' };
+  /**
+   * Промпт слайда-картинки: композиция «заголовок + тезисы + иллюстрация» — как у
+   * агента «Презентатор Genosai». Русский текст в кавычках, правило про кириллицу
+   * обязательно, иначе модель рисует «псевдорусские» буквы. Стиль допишет сервер.
+   */
+  function composeRenderPrompt(spec, isFirst) {
+    var parts = [];
+    parts.push('Профессиональный слайд презентации в формате 16:9. Весь слайд — единая композиция: ' +
+      'заголовок, тезисы и иллюстрация, сбалансированная сетка, много воздуха.');
+    if (isFirst) {
+      parts.push('Это титульный слайд: очень крупный заголовок «' + spec.title + '»' +
+        (spec.bullets && spec.bullets.length ? ', под ним подзаголовок «' + spec.bullets[0] + '»' : '') +
+        ', рядом крупная выразительная иллюстрация.');
+    } else {
+      parts.push('Крупный заголовок слайда: «' + spec.title + '».');
+      if (spec.bullets && spec.bullets.length) {
+        parts.push('Тезисы на слайде, каждый отдельной короткой строкой с маленькой иконкой: ' +
+          spec.bullets.map(function (b) { return '«' + b + '»'; }).join(', ') + '.');
+      }
+    }
+    if (spec.visual) parts.push('Иллюстрация: ' + spec.visual);
+    parts.push('ВЕСЬ текст на слайде строго на русском языке, корректная читаемая кириллица, ' +
+      'ровные строки, без орфографических ошибок и искажённых букв. Без водяных знаков и логотипов.');
+    return parts.join(' ');
+  }
 
   function renderPlan(credits) {
     el('deckForm').className = 'hide';
     el('deckPlan').className = '';
-    // смета: сколько будет стоить отрисовка, и хватит ли баланса
+    // смета: каждый слайд — одна картинка
     var style = activeStyle();
     var imodel = modelById((style && style.model) || DEFAULTS.model);
-    var withPics = PLAN_CTX.withImages
-      ? PLAN.filter(function (s) { return s.image && s.layout !== 'text'; }).length
-      : 0;
-    var cost = imodel && imodel.cost ? withPics * imodel.cost : 0;
+    var cost = imodel && imodel.cost ? PLAN.length * imodel.cost : 0;
     var balance = parseFloat(el('balance').textContent) || 0;
-    var money = withPics
-      ? ' Картинок: ' + withPics + ' × ' + (imodel ? imodel.cost : '?') + ' = ~' + cost + ' кр.' +
-        (balance ? ' Баланс: ' + balance + (cost > balance ? ' — не хватит!' : '') : '')
-      : ' Без картинок.';
 
-    el('planHead').textContent = 'План: ' + PLAN.length + ' слайд(ов), текст стоил ' + credits + ' кр.' +
-      money + ' Правь прямо здесь.';
+    el('planHead').textContent = 'План: ' + PLAN.length + ' слайд(ов), текст стоил ' + credits + ' кр. ' +
+      'Отрисовка: ' + PLAN.length + ' × ' + (imodel ? imodel.cost : '?') + ' = ~' + cost + ' кр.' +
+      (balance ? ' Баланс: ' + balance + (cost > balance ? ' — не хватит!' : '') : '') +
+      ' Правь прямо здесь.';
 
     var list = el('planList');
     list.innerHTML = '';
@@ -1338,22 +1353,12 @@
       var hd = document.createElement('div');
       hd.className = 'hd';
       var num = document.createElement('b');
-      num.textContent = 'Слайд ' + (idx + 1);
+      num.textContent = idx === 0 ? 'Слайд 1 — титульный' : 'Слайд ' + (idx + 1);
       var del = document.createElement('i');
       del.textContent = '✕'; del.title = 'Убрать слайд';
       del.onclick = function () { PLAN.splice(idx, 1); renderPlan(credits); };
       hd.appendChild(num); hd.appendChild(del);
       card.appendChild(hd);
-
-      var lay = document.createElement('select');
-      ['full', 'split', 'text'].forEach(function (k) {
-        var o = document.createElement('option');
-        o.value = k; o.textContent = LAYOUT_NAMES[k];
-        if (k === spec.layout) o.selected = true;
-        lay.appendChild(o);
-      });
-      lay.onchange = function () { spec.layout = lay.value; };
-      card.appendChild(lay);
 
       var title = document.createElement('input');
       title.type = 'text'; title.value = spec.title || ''; title.placeholder = 'Заголовок';
@@ -1361,20 +1366,24 @@
       card.appendChild(title);
 
       var bullets = document.createElement('textarea');
-      bullets.value = (spec.bullets || []).join('\n');
-      bullets.placeholder = 'Пункты, каждый с новой строки';
+      bullets.value = (spec.bullets || []).join(String.fromCharCode(10));
+      bullets.placeholder = idx === 0 ? 'Подзаголовок' : 'Тезисы на слайде, каждый с новой строки';
       bullets.oninput = function () {
-        spec.bullets = bullets.value.split('\n').map(function (s) { return s.trim(); }).filter(Boolean);
+        spec.bullets = bullets.value.split(String.fromCharCode(10)).map(function (x) { return x.trim(); }).filter(Boolean);
       };
       card.appendChild(bullets);
 
-      if (PLAN_CTX.withImages) {
-        var img = document.createElement('textarea');
-        img.value = spec.image || '';
-        img.placeholder = 'Промпт картинки (английский)';
-        img.oninput = function () { spec.image = img.value; };
-        card.appendChild(img);
-      }
+      var visual = document.createElement('textarea');
+      visual.value = spec.visual || '';
+      visual.placeholder = 'Идея иллюстрации (по-русски)';
+      visual.oninput = function () { spec.visual = visual.value; };
+      card.appendChild(visual);
+
+      var speak = document.createElement('textarea');
+      speak.value = spec.speak || '';
+      speak.placeholder = 'Речь докладчика — уйдёт в заметки спикера';
+      speak.oninput = function () { spec.speak = speak.value; };
+      card.appendChild(speak);
 
       list.appendChild(card);
     });
@@ -1409,7 +1418,6 @@
 
   function buildDeck() {
     var style = activeStyle();
-    var withImages = PLAN_CTX.withImages;
     var imageModelId = (style && style.model) || DEFAULTS.model;
     var imageModel = modelById(imageModelId);
     var i = 0, failures = 0;
@@ -1421,8 +1429,8 @@
         el('deckForm').className = '';
         progress(1, 1);
         say('deck', failures
-          ? 'Готово: ' + PLAN.length + ' слайдов, без картинки осталось ' + failures + '.'
-          : 'Готово: ' + PLAN.length + ' слайдов.', 'ok');
+          ? 'Готово: ' + PLAN.length + ' слайдов, не отрисовалось ' + failures + ' — на них остался заголовок.'
+          : 'Готово: ' + PLAN.length + ' слайдов. Речь докладчика — в заметках спикера.', 'ok');
         refreshBalance();
       }
       if (PLAN_CTX.mode === 'fresh' && PLAN_CTX.oldIds && PLAN_CTX.oldIds.length) {
@@ -1437,20 +1445,14 @@
       if (i >= PLAN.length) { finish(); return; }
       var spec = PLAN[i];
       progress(i, PLAN.length);
-      say('deck', 'Слайд ' + (i + 1) + ' из ' + PLAN.length + ': ' + (spec.title || 'без заголовка'));
+      say('deck', 'Слайд ' + (i + 1) + ' из ' + PLAN.length + ': рисую целиком…');
 
       google.script.run
         .withSuccessHandler(function (slideId) {
-          var needsImage = withImages && spec.image && spec.layout !== 'text';
-          if (!needsImage) { i++; next(); return; }
-
-          var placement = spec.layout === 'full' ? 'full' : 'right';
-          say('deck', 'Слайд ' + (i + 1) + ' из ' + PLAN.length + ': рисую картинку…');
-
           generateImage({
             model: imageModelId,
-            prompt: spec.image,
-            aspectRatio: bestAspect(imageModel, targetRatio(placement)) || DEFAULTS.aspect,
+            prompt: composeRenderPrompt(spec, i === 0),
+            aspectRatio: bestAspect(imageModel, DECK.ratio || 16 / 9) || DEFAULTS.aspect,
             resolution: DEFAULTS.resolution,
             styleId: ACTIVE_STYLE_ID,
             maxRefs: (imageModel && imageModel.maxRefs) || 1
@@ -1460,15 +1462,11 @@
             google.script.run
               .withSuccessHandler(function () { i++; next(); })
               .withFailureHandler(function () { failures++; i++; next(); })
-              .uiInsertImage(url, {
-                slideId: slideId,
-                placement: placement,
-                title: spec.layout === 'full' ? spec.title : ''
-              });
+              .uiInsertImage(url, { slideId: slideId, placement: 'full' });
           },
           function () {
             failures++;
-            if (spec.layout === 'full' && spec.title) {
+            if (spec.title) {
               google.script.run
                 .withSuccessHandler(function () { i++; next(); })
                 .withFailureHandler(function () { i++; next(); })
@@ -1480,7 +1478,7 @@
           el('planApply').disabled = false; el('planApply').textContent = 'Вставить в презентацию';
           say('deck', (err && err.message) || String(err), 'err');
         })
-        .uiCreateSlide(spec, 'end');
+        .uiCreateSlide({ layout: 'render', speak: spec.speak || '' }, 'end');
     }
     next();
   }
@@ -1724,7 +1722,7 @@
     }
     if (m && m.resolutions.indexOf(DEFAULTS.resolution) >= 0) el('res').value = DEFAULTS.resolution;
 
-    el('balance').textContent = state.balance === null ? '' : state.balance + ' кр.';
+    el('balance').textContent = state.balance === null ? '—' : state.balance;
     el('go').disabled = false;
     el('dGo').disabled = false;
 

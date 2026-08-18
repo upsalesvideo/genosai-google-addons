@@ -8,11 +8,9 @@
     .muted { color: var(--muted); font-size: 11px; }
     .hide { display: none !important; }
 
-    /* Название агента уже есть в шапке самой панели Google — здесь только баланс и шестерёнка */
-    .head { display: flex; align-items: center; gap: 8px; justify-content: flex-end; min-height: 26px; }
-    .icon { border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer;
-      width: 26px; height: 26px; font-size: 14px; line-height: 1; padding: 0; flex: none; }
-    .icon:hover { border-color: var(--accent); }
+    .tabs .icon { flex: none; width: 30px; border: 2px solid transparent; border-radius: 6px;
+      background: transparent; cursor: pointer; font-size: 14px; line-height: 1; padding: 0; color: var(--muted); }
+    .tabs .icon:hover { background: #fff; color: var(--accent); }
 
     .tabs { display: flex; gap: 2px; background: var(--bg); border-radius: 8px; padding: 3px; margin: 10px 0 4px; }
     .tabs button { flex: 1; padding: 5px 3px; border: 2px solid transparent; border-radius: 6px;
@@ -96,13 +94,9 @@
   </style>
 </head>
 <body>
-  <div class="head">
-    <span class="muted" id="balance"></span>
-    <button class="icon" id="gear" title="Настройки">⚙</button>
-  </div>
-
   <!-- ================= НАСТРОЙКИ ================= -->
   <div id="settings" class="hide">
+    <div class="muted" style="margin-top:6px">Кредитов на балансе: <b id="balance">…</b></div>
     <label for="apiKey">API-ключ Genosai</label>
     <input type="text" id="apiKey" placeholder="sdk_live_…">
     <div class="muted" id="keyState"></div>
@@ -123,6 +117,7 @@
       <button data-tab="image" class="on">Картинка</button>
       <button data-tab="text">Текст</button>
       <button data-tab="tpl">Шаблоны</button>
+      <button class="icon" id="gear" title="Настройки и кредиты">⚙</button>
     </div>
 
     <!-- ================= КАРТИНКА ================= -->
@@ -324,6 +319,7 @@
     google.script.run.withSuccessHandler(function (info) {
       el('keyState').textContent = info.hasKey ? 'Сейчас используется ключ ' + info.masked : 'Ключ ещё не задан.';
     }).uiKeyInfo();
+    refreshBalance();   // кредиты живут здесь, в настройках
   }
   function closeSettings() {
     el('settings').className = 'hide';
@@ -353,7 +349,7 @@
     google.script.run
       .withSuccessHandler(function (b) {
         say('settings', 'Кредитов: ' + b.total + '\n(основной счёт ' + b.main + ', бонусы ' + b.bonus + ')', 'ok');
-        el('balance').textContent = b.total + ' кр.';
+        el('balance').textContent = b.total;
       })
       .withFailureHandler(function (err) { say('settings', (err && err.message) || String(err), 'err'); })
       .uiCheckBalance();
@@ -407,7 +403,7 @@
 
   function refreshBalance() {
     google.script.run.withSuccessHandler(function (b) {
-      el('balance').textContent = b + ' кр.';
+      el('balance').textContent = b;
     }).uiGetBalance();
   }
 
@@ -1105,7 +1101,7 @@
 
     renderTemplates();
 
-    el('balance').textContent = state.balance === null ? '' : state.balance + ' кр.';
+    el('balance').textContent = state.balance === null ? '—' : state.balance;
     el('go').disabled = false;
     el('tGo').disabled = false;
 

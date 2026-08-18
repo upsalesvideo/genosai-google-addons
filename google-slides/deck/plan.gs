@@ -1,12 +1,15 @@
 /**
  * deck/plan.gs — сборка презентации целиком.
- * Текстовая модель раскладывает тему на слайды и пишет промпт картинки к каждому,
- * дальше сайдбар по одному создаёт слайды и генерирует иллюстрации в выбранном стиле.
+ *
+ * Подход взят у агента «Презентатор Genosai»: слайд — это ОДНА картинка 16:9,
+ * внутри которой уже нарисованы заголовок, тезисы и иллюстрация в едином стиле.
+ * Никакого наложения текстовых рамок поверх — chatgpt-image-2 сам рисует
+ * читаемую кириллицу. «Что рассказывать» уходит в заметки докладчика.
  */
 
 /**
- * params: {topic, slidesCount, model, withImages, styleId, language}
- * → {slides: [{layout, title, bullets[], image}], credits}
+ * params: {topic, slidesCount, model, styleId}
+ * → {slides: [{title, bullets[], visual, speak}], credits}
  */
 function deckPlan(params) {
   var topic = String(params.topic || '').trim();
@@ -14,34 +17,29 @@ function deckPlan(params) {
 
   var count = Math.min(30, Math.max(1, Number(params.slidesCount) || 8));
   var style = styleGet_(params.styleId);
-  var withImages = params.withImages !== false;
 
   var system =
-    'Ты — методист и дизайнер презентаций. Раскладываешь тему на слайды так, ' +
-    'чтобы каждый слайд нёс одну мысль, а не пересказывал всё сразу.\n' +
-    'Правила текста: заголовок — до 60 знаков, по-русски; пунктов не больше четырёх, ' +
-    'каждый до 90 знаков, без воды и канцелярита; не выдумывай факты и цифры, ' +
-    'которых нет во вводных.\n' +
-    'Раскладки: "full" — обложка или сильный визуальный слайд, текст только в заголовке; ' +
-    '"split" — заголовок и пункты слева, картинка справа; "text" — только текст, без картинки.\n' +
-    'Первый слайд всегда "full". Не делай больше двух "text" подряд.\n' +
-    (withImages
-      ? 'Поле image — промпт для генератора картинок НА АНГЛИЙСКОМ: объект, композиция, ' +
-        'освещение, настроение. Без текста и логотипов на картинке. Для "text" ставь пустую строку.\n'
-      : 'Поле image всегда пустая строка.\n') +
+    'Ты — методист презентаций. Раскладываешь тему на слайды по логической арке: ' +
+    'боль → сдвиг → разбор → итог и призыв. Первый слайд — титульный, последний — вывод или призыв.\n' +
+    'Каждый слайд будет нарисован ЦЕЛИКОМ как одна картинка: заголовок, тезисы и иллюстрация ' +
+    'в единой композиции. Поэтому для каждого слайда дай:\n' +
+    '- title: заголовок до 55 знаков, по-русски, без точки в конце;\n' +
+    '- bullets: 1–3 КОРОТКИЕ фразы на слайд, каждая до 60 знаков (для титульного — один подзаголовок);\n' +
+    '- visual: идея иллюстрации по-русски, 1–2 предложения: объект, композиция, настроение;\n' +
+    '- speak: что рассказывать докладчику, 2–3 живых предложения (пойдёт в заметки спикера).\n' +
+    'Не выдумывай факты и цифры, которых нет во вводных. Тезисы — суть, не вода.\n' +
     (style && style.description
-      ? 'Все картинки будут сгенерированы в одном стиле: ' + style.description +
-        '. Промпты пиши так, чтобы они не спорили с этим стилем.\n'
+      ? 'Иллюстрации будут в стиле: ' + style.description + ' — идеи визуала не должны с ним спорить.\n'
       : '') +
-    'Ответ — ТОЛЬКО JSON-массив, без пояснений и без markdown-ограждений:\n' +
-    '[{"layout":"full","title":"...","bullets":["..."],"image":"..."}]';
+    'Ответ — ТОЛЬКО JSON-массив без пояснений и без markdown-ограждений:\n' +
+    '[{"title":"...","bullets":["..."],"visual":"...","speak":"..."}]';
 
   var user = 'Сделай план презентации из ' + count + ' слайдов.\n\nТема и вводные:\n' + topic;
 
   var out = genosaiChat(params.model || 'gpt-5.4', [
     { role: 'system', content: system },
     { role: 'user', content: user }
-  ], { max_tokens: 4000 });
+  ], { max_tokens: 6000 });
 
   var slides = deckParseJson_(out.content);
   if (!slides.length) throw new Error('Модель вернула пустой план. Попробуй ещё раз или уточни тему.');
@@ -66,15 +64,13 @@ function deckParseJson_(text) {
   if (!Array.isArray(parsed)) return [];
 
   return parsed.map(function (s) {
-    var layout = String((s && s.layout) || 'text').toLowerCase();
-    if (['full', 'split', 'text'].indexOf(layout) < 0) layout = 'text';
     return {
-      layout: layout,
       title: String((s && s.title) || '').trim(),
       bullets: Array.isArray(s && s.bullets)
-        ? s.bullets.map(function (b) { return String(b).trim(); }).filter(Boolean)
+        ? s.bullets.map(function (b) { return String(b).trim(); }).filter(Boolean).slice(0, 4)
         : [],
-      image: String((s && s.image) || '').trim()
+      visual: String((s && s.visual) || '').trim(),
+      speak: String((s && s.speak) || '').trim()
     };
-  }).filter(function (s) { return s.title || s.bullets.length || s.image; });
+  }).filter(function (s) { return s.title || s.bullets.length; });
 }
