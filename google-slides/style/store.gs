@@ -120,6 +120,27 @@ function styleSeed_() {
       refs: []
     },
     {
+      id: 'st_blue3d',
+      name: 'Синий 3D',
+      description: 'clean white background, dark navy headline with bright blue accent words, ' +
+        'photorealistic 3D render object on the right with soft studio light and gentle reflections, ' +
+        'thin blue line icons in rounded squares next to short bullet lines, ' +
+        'generous white space, premium corporate tech look, no extra text and no logos',
+      model: 'chatgpt-image-2',
+      placement: 'full',
+      refs: []
+    },
+    {
+      id: 'st_green3d',
+      name: 'Зелёный 3D',
+      description: 'clean white background, deep green headline, photorealistic 3D render with natural ' +
+        'materials — greenery, wood, soft daylight — on the right, thin green line icons in rounded ' +
+        'circles next to short bullet lines, calm eco feeling, generous white space, no extra text and no logos',
+      model: 'chatgpt-image-2',
+      placement: 'full',
+      refs: []
+    },
+    {
       id: 'st_line',
       name: 'Линейная схема',
       description: 'minimal line art diagram, thin monochrome strokes on a light background, ' +
