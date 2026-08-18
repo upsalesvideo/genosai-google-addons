@@ -282,6 +282,22 @@ function uiSlideTitleOnly(slideId, title) {
   return slidesTitleOnly(slideId, title);
 }
 
+// ---------- вкладка «Чат» ----------
+
+/**
+ * Ход разговора: модель сама вызывает инструменты и правит презентацию.
+ * history: [{role:'user'|'assistant', content}] — предыдущие реплики.
+ * → {reply, actions[], credits}
+ */
+function uiChatAgent(model, history) {
+  return chatAgent(model, history);
+}
+
+/** Заметки докладчика текущего слайда — способ надиктовать команду голосом Google. */
+function uiSlideNotes() {
+  return slidesCurrentNotes();
+}
+
 /** id слайдов, которые были до сборки (для режима «создать с нуля»). */
 function uiSlideIds() {
   return slidesAllIds();

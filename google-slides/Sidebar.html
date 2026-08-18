@@ -91,6 +91,14 @@
     .hist .tx { flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hist .ins { color: var(--accent); cursor: pointer; font-size: 11px; white-space: nowrap; }
 
+    .chatlog { max-height: 300px; overflow-y: auto; margin-top: 10px; padding-right: 2px; }
+    .msg { padding: 7px 9px; border-radius: 9px; margin-top: 6px; font-size: 12px; line-height: 1.35; white-space: pre-wrap; }
+    .msg.u { background: #efeaff; }
+    .msg.a { background: var(--bg); }
+    .msg.act { background: #e8f5ec; font-size: 11px; color: #1b5e35; }
+    .msg.er { background: #fce8e6; color: #a4241c; }
+    .tabs button { font-size: 11px; }
+
     .jobs { margin-top: 10px; }
     .job { display: flex; gap: 6px; align-items: baseline; font-size: 11px; padding: 4px 6px;
       border-radius: 6px; background: var(--bg); margin-top: 4px; }
@@ -146,9 +154,31 @@
 
   <div id="main" class="hide">
     <div class="tabs">
+      <button data-tab="chat">Чат</button>
       <button data-tab="image" class="on">Картинка</button>
       <button data-tab="style">Стиль</button>
       <button data-tab="deck">Презентация</button>
+    </div>
+
+    <!-- ================= ЧАТ ================= -->
+    <div class="pane" id="pane-chat">
+      <label for="cModel">Модель</label>
+      <select id="cModel"></select>
+
+      <div class="chatlog" id="chatLog"></div>
+
+      <label for="cInput">Что сделать с презентацией</label>
+      <textarea id="cInput" style="min-height:70px"
+        placeholder="Например: на каждый слайд в правый верхний угол поставь genosai.io"></textarea>
+
+      <div class="row btns">
+        <div><button class="sec mini" id="cMic">🎤 Голосом</button></div>
+        <div><button class="sec mini" id="cNotes">Из заметок слайда</button></div>
+      </div>
+
+      <button class="act" id="cSend">Выполнить</button>
+      <div class="status" id="st-chat"></div>
+      <div class="links"><a id="cClear">Очистить переписку</a></div>
     </div>
 
     <!-- ================= КАРТИНКА ================= -->
@@ -387,7 +417,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
       b.className = b.getAttribute('data-tab') === tab ? 'on' : '';
     });
-    ['image', 'style', 'deck'].forEach(function (t) {
+    ['chat', 'image', 'style', 'deck'].forEach(function (t) {
       el('pane-' + t).className = 'pane' + (t === tab ? ' on' : '');
     });
   }
@@ -1536,6 +1566,120 @@
     step();
   };
 
+
+  // ---------- вкладка «Чат»: команды к презентации словами ----------
+  var CHAT_HISTORY = [];
+  var recognizer = null;
+
+  function chatSay(kind, text) {
+    var box = el('chatLog');
+    var div = document.createElement('div');
+    div.className = 'msg ' + kind;
+    div.textContent = text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+    return div;
+  }
+
+  function chatSend(text) {
+    var msg = String(text || el('cInput').value).trim();
+    if (!msg) { say('chat', 'Напиши или надиктуй команду.', 'err'); return; }
+
+    chatSay('u', msg);
+    CHAT_HISTORY.push({ role: 'user', content: msg });
+    el('cInput').value = '';
+    el('cSend').disabled = true;
+    el('cSend').textContent = 'Выполняю…';
+    say('chat', 'Думаю и правлю презентацию…');
+
+    google.script.run
+      .withSuccessHandler(function (res) {
+        el('cSend').disabled = false;
+        el('cSend').textContent = 'Выполнить';
+        (res.actions || []).forEach(function (a) { chatSay('act', '✓ ' + a); });
+        chatSay('a', res.reply);
+        CHAT_HISTORY.push({ role: 'assistant', content: res.reply });
+        if (CHAT_HISTORY.length > 12) CHAT_HISTORY = CHAT_HISTORY.slice(-12);
+        say('chat', 'Готово. Потрачено ' + res.credits + ' кр.', 'ok');
+        refreshBalance();
+      })
+      .withFailureHandler(function (err) {
+        el('cSend').disabled = false;
+        el('cSend').textContent = 'Выполнить';
+        var text = (err && err.message) || String(err);
+        chatSay('er', text);
+        say('chat', text, 'err');
+      })
+      .uiChatAgent(el('cModel').value, CHAT_HISTORY);
+  }
+
+  el('cSend').onclick = function () { chatSend(); };
+
+  el('cInput').onkeydown = function (e) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) chatSend();
+  };
+
+  el('cClear').onclick = function () {
+    CHAT_HISTORY = [];
+    el('chatLog').innerHTML = '';
+    say('chat', 'Переписка очищена — модель забыла контекст.');
+  };
+
+  /** Голос: сначала пробуем распознавание браузера, иначе подсказываем диктовку системы. */
+  el('cMic').onclick = function () {
+    var Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!Rec) {
+      say('chat', 'Браузер не даёт микрофон боковой панели. Нажми Win+H (в Windows) или Fn-Fn (на Mac) ' +
+                  'и диктуй прямо в поле — либо надиктуй в заметки докладчика и жми «Из заметок слайда».', 'err');
+      return;
+    }
+    if (recognizer) { recognizer.stop(); recognizer = null; el('cMic').textContent = '🎤 Голосом'; return; }
+
+    try {
+      recognizer = new Rec();
+      recognizer.lang = 'ru-RU';
+      recognizer.interimResults = true;
+      recognizer.continuous = false;
+      var base = el('cInput').value;
+      recognizer.onresult = function (e) {
+        var text = '';
+        for (var i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
+        el('cInput').value = (base ? base + ' ' : '') + text;
+      };
+      recognizer.onerror = function (e) {
+        el('cMic').textContent = '🎤 Голосом';
+        recognizer = null;
+        say('chat', 'Микрофон недоступен (' + e.error + '). Диктуй через Win+H прямо в поле ' +
+                    'или надиктуй в заметки докладчика и нажми «Из заметок слайда».', 'err');
+      };
+      recognizer.onend = function () {
+        el('cMic').textContent = '🎤 Голосом';
+        recognizer = null;
+        say('chat', 'Записал. Проверь текст и жми «Выполнить».');
+      };
+      recognizer.start();
+      el('cMic').textContent = '● Слушаю…';
+      say('chat', 'Говори — текст появится в поле.');
+    } catch (e) {
+      recognizer = null;
+      el('cMic').textContent = '🎤 Голосом';
+      say('chat', 'Не получилось включить микрофон: ' + ((e && e.message) || e), 'err');
+    }
+  };
+
+  /** Заметки докладчика — надёжный способ надиктовать: голосовой ввод там даёт сам Google. */
+  el('cNotes').onclick = function () {
+    say('chat', 'Читаю заметки текущего слайда…');
+    google.script.run
+      .withSuccessHandler(function (text) {
+        if (!text) { say('chat', 'В заметках этого слайда пусто. Вид → Заметки докладчика, там же есть голосовой ввод.', 'err'); return; }
+        el('cInput').value = text;
+        say('chat', 'Забрал текст из заметок. Проверь и жми «Выполнить».', 'ok');
+      })
+      .withFailureHandler(function (err) { say('chat', (err && err.message) || String(err), 'err'); })
+      .uiSlideNotes();
+  };
+
   // ---------- запуск ----------
   function init(state) {
     if (state.needsKey) {
@@ -1553,6 +1697,8 @@
     fillModelSelect(el('model'), MODELS);
     fillModelSelect(el('stModel'), MODELS);
     fillModelSelect(el('dModel'), TEXT_MODELS);
+    fillModelSelect(el('cModel'), TEXT_MODELS);
+    if (TEXT_MODELS.filter(function (m) { return m.id === 'gpt-5.4'; }).length) el('cModel').value = 'gpt-5.4';
 
     el('model').onchange = function () { applyAutoAspect(); onModelRefs(); };
     el('placement').onchange = applyAutoAspect;
