@@ -302,9 +302,9 @@ function uiCreateCanvases(specs) {
   return deckCreateCanvases(specs);
 }
 
-/** Сценарий слайда — в комментарий к презентации. → {ok} либо {ok:false, error} */
-function uiAddComment(slideNumber, title, speak) {
-  return deckAddComment(slideNumber, title, speak);
+/** Сценарий слайда — комментарием, привязанным к этому слайду. → {ok} либо {ok:false, error} */
+function uiAddComment(slideNumber, title, speak, slideId) {
+  return deckAddComment(slideNumber, title, speak, slideId);
 }
 
 /** Запасной путь, если комментарии недоступны: заметки докладчика. */
@@ -317,9 +317,9 @@ function uiPlaceSlideImage(slideId, url) {
   return deckPlaceImage(slideId, url);
 }
 
-/** Проба пера: пишем тестовый комментарий и честно возвращаем ответ Drive. */
+/** Проба пера: пишем комментарий, перечитываем список и возвращаем полный отчёт. */
 function uiTestComment() {
-  return deckAddComment(0, 'проверка связи', 'Если вы это читаете — комментарии работают.');
+  return deckCommentSelfCheck();
 }
 
 // ---------- история слайдов ----------

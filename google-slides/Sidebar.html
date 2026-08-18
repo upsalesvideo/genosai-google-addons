@@ -449,11 +449,17 @@
     google.script.run
       .withSuccessHandler(function (res) {
         el('testComment').disabled = false;
-        say('settings', res.ok
-          ? 'Комментарии работают: тестовый комментарий записан, можно удалить его в панели комментариев.'
-          : 'Комментарии недоступны.\n' + res.error +
-            '\n\nПереоткрой панель: Google попросит новое разрешение на Диск, после этого повтори проверку.',
-          res.ok ? 'ok' : 'err');
+        var lines = [];
+        lines.push(res.wrote ? 'Запись: получилось.' : 'Запись: НЕ получилась.');
+        if (res.error) lines.push('Ошибка: ' + res.error);
+        lines.push('Комментариев в файле сейчас: ' + res.total + ' (наших проверочных: ' + res.ours + ').');
+        (res.samples || []).forEach(function (x) { lines.push('  • ' + x); });
+        if (res.wrote && res.total > 0) {
+          lines.push('');
+          lines.push('Теперь открой панель комментариев в презентации. Если их там не видно — ' +
+                     'значит Слайды не показывают комментарии без привязки к объекту, и это ограничение Google.');
+        }
+        say('settings', lines.join(String.fromCharCode(10)), res.wrote ? 'ok' : 'err');
       })
       .withFailureHandler(function (err) {
         el('testComment').disabled = false;
@@ -1514,7 +1520,7 @@
               .withFailureHandler(function (err) {
                 commentFailed = (err && err.message) || true;
               })
-              .uiAddComment(idx + 1, spec.title, spec.speak);
+              .uiAddComment(idx + 1, spec.title, spec.speak, canvas.slideId);
           }
 
           // шаг в секунду: очередь Genosai принимает пачку без отказов
