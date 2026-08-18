@@ -129,8 +129,17 @@
   </style>
 </head>
 <body>
-  <!-- ================= НАСТРОЙКИ ================= -->
-  <div id="settings" class="hide">
+  <div id="main" class="hide">
+    <div class="tabs">
+      <button data-tab="image" class="on">Слайд</button>
+      <button data-tab="style">Стиль</button>
+      <button data-tab="deck">Презентация</button>
+      <button data-tab="chat">Чат</button>
+      <button class="icon" data-tab="set" id="gear" title="Настройки и кредиты">⚙</button>
+    </div>
+
+    <!-- ================= НАСТРОЙКИ ================= -->
+  <div class="pane" id="pane-set">
     <div class="muted" style="margin-top:6px">Кредитов на балансе: <b id="balance">…</b></div>
     <label for="apiKey">API-ключ Genosai</label>
     <input type="text" id="apiKey" placeholder="sdk_live_…">
@@ -141,21 +150,11 @@
     <button class="sec" id="testComment">Проверить комментарии</button>
     <div class="status" id="st-settings"></div>
     <div class="jobs" id="testReport"></div>
-    <button class="sec" id="closeSettings">Закрыть настройки</button>
     <div class="muted" style="margin-top:10px">
       Ключ хранится в вашем личном профиле Google и не виден другим соавторам файла.
       Взять ключ: genosai.io → раздел API.
     </div>
   </div>
-
-  <div id="main" class="hide">
-    <div class="tabs">
-      <button data-tab="image" class="on">Слайд</button>
-      <button data-tab="style">Стиль</button>
-      <button data-tab="deck">Презентация</button>
-      <button data-tab="chat">Чат</button>
-      <button class="icon" id="gear" title="Настройки и кредиты">⚙</button>
-    </div>
 
     <!-- ================= ЧАТ ================= -->
     <div class="pane" id="pane-chat">
@@ -320,7 +319,7 @@
         </div>
 
         <div class="muted" style="margin-top:10px">Каждый слайд рисуется целиком одной картинкой:
-        заголовок, тезисы и иллюстрация в едином дизайне. Речь докладчика уходит в комментарии к слайду — их удобно читать сбоку.</div>
+        заголовок, тезисы и иллюстрация в едином дизайне. Речь докладчика уходит в заметки докладчика и в комментарии.</div>
 
       <label for="dMode">Что делать с презентацией</label>
         <select id="dMode">
@@ -330,31 +329,6 @@
 
         <button class="act" id="dGo" disabled>Собрать презентацию</button>
 
-        <fieldset>
-          <legend>Дорисовать картинки к готовым слайдам</legend>
-          <div class="muted">Пройду по слайдам, соберу промпт из их текста и нарисую в выбранном стиле.</div>
-          <div class="row">
-            <div>
-              <label for="fillWhat">Какие слайды</label>
-              <select id="fillWhat">
-                <option value="empty">Только без картинок</option>
-                <option value="all">Все подряд</option>
-              </select>
-            </div>
-            <div>
-              <label for="fillPlacement">Раскладка</label>
-              <select id="fillPlacement">
-                <option value="full">Весь слайд, за текстом</option>
-                <option value="right">Справа</option>
-                <option value="left">Слева</option>
-              </select>
-            </div>
-          </div>
-          <button class="sec" id="fillScan">Посмотреть, сколько будет стоить</button>
-          <div class="status" id="st-fill"></div>
-          <button class="act hide" id="fillGo">Дорисовать картинки</button>
-          <div class="bar" id="fillBar"><i id="fillBarFill"></i></div>
-        </fieldset>
       </div>
 
       <div id="deckPlan" class="hide">
@@ -366,6 +340,7 @@
       </div>
 
       <div class="bar" id="dBar"><i id="dBarFill"></i></div>
+      <div class="jobs" id="deckJobs"></div>
       <div class="status" id="st-deck"></div>
 
       <div class="links"><b style="color:var(--muted);font-size:11px">История слайдов</b>
@@ -415,34 +390,32 @@
   Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
     b.onclick = function () { showTab(b.getAttribute('data-tab')); };
   });
+  var LAST_TAB = 'image';
   function showTab(tab) {
+    if (tab !== 'set') LAST_TAB = tab;      // чтобы из настроек вернуться туда, где были
     Array.prototype.forEach.call(document.querySelectorAll('.tabs button'), function (b) {
-      b.className = b.getAttribute('data-tab') === tab ? 'on' : '';
+      var own = b.getAttribute('data-tab');
+      var active = own === tab;
+      b.className = (b.id === 'gear' ? 'icon' : '') + (active ? ' on' : '');
     });
-    ['chat', 'image', 'style', 'deck'].forEach(function (t) {
+    ['chat', 'image', 'style', 'deck', 'set'].forEach(function (t) {
       el('pane-' + t).className = 'pane' + (t === tab ? ' on' : '');
     });
   }
 
   // ---------- настройки ----------
   function openSettings(force) {
-    el('settings').className = '';
-    el('main').className = 'hide';
-    // без ключа закрывать настройки некуда — прячем кнопку «Закрыть»
-    el('closeSettings').className = force ? 'sec hide' : 'sec';
+    el('main').className = '';
+    showTab('set');
     google.script.run.withSuccessHandler(function (info) {
       el('keyState').textContent = info.hasKey ? 'Сейчас используется ключ ' + info.masked : 'Ключ ещё не задан.';
     }).uiKeyInfo();
     refreshBalance();   // кредиты живут здесь, в настройках
   }
   function closeSettings() {
-    el('settings').className = 'hide';
     el('main').className = '';
+    showTab(LAST_TAB);          // возвращаемся туда, откуда открыли настройки
   }
-  el('gear').onclick = function () {
-    if (el('settings').className === 'hide') openSettings(false); else closeSettings();
-  };
-  el('closeSettings').onclick = closeSettings;
 
   el('saveKey').onclick = function () {
     var key = el('apiKey').value.trim();
@@ -452,7 +425,7 @@
         el('apiKey').value = '';
         el('keyState').textContent = info.hasKey ? 'Сейчас используется ключ ' + info.masked : 'Ключ удалён.';
         say('settings', info.hasKey ? 'Ключ сохранён. Загружаю модели…' : 'Ключ удалён.', 'ok');
-        if (info.hasKey) boot();
+        if (info.hasKey) { boot(); closeSettings(); }
       })
       .withFailureHandler(function (err) { say('settings', (err && err.message) || String(err), 'err'); })
       .uiSaveKey(key);
@@ -1470,6 +1443,33 @@
    * Сборка колоды: холсты создаются сразу все, промпты уходят в Genosai с шагом
    * в секунду (параллельно), каждая готовая картинка тут же садится на свой слайд.
    */
+  /** Строки «слайд N — статус», такие же, как в очереди на вкладке «Слайд». */
+  var DECK_JOBS = [];
+
+  function renderDeckJobs() {
+    var box = el('deckJobs');
+    box.innerHTML = '';
+    DECK_JOBS.forEach(function (j) {
+      var row = document.createElement('div');
+      row.className = 'job' + (j.state === 'ok' ? ' ok' : j.state === 'err' ? ' err' : '');
+      var n = document.createElement('span'); n.className = 'n'; n.textContent = '#' + j.num;
+      var nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = j.title || 'без заголовка';
+      var st = document.createElement('span'); st.className = 'stt'; st.textContent = j.text;
+      row.appendChild(n); row.appendChild(nm); row.appendChild(st);
+      if (j.url) { row.onclick = function () { showImage(j.url); }; }
+      box.appendChild(row);
+    });
+  }
+
+  function deckJob(idx, text, state, url) {
+    var job = DECK_JOBS[idx];
+    if (!job) return;
+    job.text = text;
+    if (state) job.state = state;
+    if (url) job.url = url;
+    renderDeckJobs();
+  }
+
   function buildDeck() {
     var style = activeStyle();
     var imageModelId = (style && style.model) || DEFAULTS.model;
@@ -1490,6 +1490,10 @@
         }
         say('deck', 'Слайды на месте, запускаю отрисовку…');
         progress(0, total);
+        DECK_JOBS = PLAN.map(function (spec, i) {
+          return { num: i + 1, title: spec.title, state: 'run', text: 'в очереди…' };
+        });
+        renderDeckJobs();
 
         PLAN.forEach(function (spec, idx) {
           var canvas = canvases[idx];
@@ -1500,23 +1504,22 @@
             visual: spec.visual, speak: spec.speak, prompt: prompt, url: ''
           });
 
-          // сценарий — в комментарий к слайду; не вышло — в заметки докладчика
+          // сценарий пишем и в заметки докладчика (всегда), и комментарием
           if (spec.speak) {
+            google.script.run.uiAddNotes(canvas.slideId, spec.speak);
             google.script.run
               .withSuccessHandler(function (res) {
-                if (res && res.ok) return;
-                commentFailed = res && res.error ? res.error : true;
-                google.script.run.uiAddNotes(canvas.slideId, spec.speak);
+                if (!res || !res.ok) commentFailed = (res && res.error) || true;
               })
-              .withFailureHandler(function () {
-                commentFailed = true;
-                google.script.run.uiAddNotes(canvas.slideId, spec.speak);
+              .withFailureHandler(function (err) {
+                commentFailed = (err && err.message) || true;
               })
               .uiAddComment(idx + 1, spec.title, spec.speak);
           }
 
           // шаг в секунду: очередь Genosai принимает пачку без отказов
           setTimeout(function () {
+            deckJob(idx, 'рисую…');
             generateImage({
               model: imageModelId,
               prompt: prompt,
@@ -1528,16 +1531,23 @@
             null,
             function (url) {
               // картинка готова — сразу на свой слайд, не дожидаясь соседей
+              deckJob(idx, 'ставлю на слайд…');
               google.script.run
                 .withSuccessHandler(function () {
                   records[idx].url = url;
+                  deckJob(idx, 'готово', 'ok', url);
                   tick('Слайд ' + (idx + 1) + ' готов');
                 })
-                .withFailureHandler(function () { failures++; tick('Слайд ' + (idx + 1) + ': не вставился'); })
+                .withFailureHandler(function () {
+                  failures++;
+                  deckJob(idx, 'не вставился', 'err');
+                  tick('Слайд ' + (idx + 1) + ': не вставился');
+                })
                 .uiPlaceSlideImage(canvas.slideId, url);
             },
             function () {
               failures++;
+              deckJob(idx, 'не нарисовался', 'err');
               if (spec.title) google.script.run.uiSlideTitleOnly(canvas.slideId, spec.title);
               tick('Слайд ' + (idx + 1) + ': не нарисовался');
             });
@@ -1565,8 +1575,8 @@
       el('deckForm').className = '';
 
       var tail = commentFailed
-        ? ' Комментарии не записались (' + commentFailed + ') — сценарий ушёл в заметки докладчика.'
-        : ' Сценарий каждого слайда — в комментариях.';
+        ? ' Речь — в заметках докладчика. Комментарии не записались: ' + commentFailed
+        : ' Речь — в заметках докладчика и в комментариях.';
       say('deck', (failures
         ? 'Готово: ' + total + ' слайдов, с проблемами ' + failures + '.'
         : 'Готово: ' + total + ' слайдов.') + tail, 'ok');
@@ -1677,88 +1687,6 @@
       .withSuccessHandler(function () { DECK_SLIDES = []; renderDeckHistory([]); })
       .uiDeckHistoryClear();
   };
-
-  // ---------- дорисовка картинок к готовым слайдам ----------
-  var FILL_LIST = [];
-
-  el('fillScan').onclick = function () {
-    say('fill', 'Смотрю слайды…');
-    google.script.run
-      .withSuccessHandler(function (slides) {
-        var onlyEmpty = el('fillWhat').value === 'empty';
-        FILL_LIST = slides.filter(function (sl) {
-          if (!sl.text || sl.text.trim().length < 10) return false;   // пустые и почти пустые пропускаем
-          return onlyEmpty ? !sl.hasImage : true;
-        });
-        if (!FILL_LIST.length) {
-          el('fillGo').className = 'act hide';
-          say('fill', 'Подходящих слайдов не нашёл: нужен текст, по которому можно придумать картинку.', 'err');
-          return;
-        }
-        var style = activeStyle();
-        var im = modelById((style && style.model) || DEFAULTS.model);
-        var cost = im && im.cost ? FILL_LIST.length * im.cost : 0;
-        var balance = parseFloat(el('balance').textContent) || 0;
-        say('fill', 'Слайдов: ' + FILL_LIST.length + '. Картинки ~' + cost + ' кр.' +
-          ' Плюс промпты — примерно ' + Math.round(FILL_LIST.length * 0.1 * 10) / 10 + ' кр.' +
-          (balance ? ' Баланс: ' + balance + (cost > balance ? ' — не хватит!' : '') : ''));
-        el('fillGo').className = 'act';
-      })
-      .withFailureHandler(function (err) { say('fill', (err && err.message) || String(err), 'err'); })
-      .uiSlidesOverview();
-  };
-
-  el('fillGo').onclick = function () {
-    if (!FILL_LIST.length) return;
-    if (!confirm('Дорисовать картинки на ' + FILL_LIST.length + ' слайд(ов)? Это спишет кредиты.')) return;
-
-    var style = activeStyle();
-    var modelId = (style && style.model) || DEFAULTS.model;
-    var model = modelById(modelId);
-    var placement = el('fillPlacement').value;
-    var i = 0, done = 0, failed = 0;
-
-    el('fillGo').disabled = true; el('fillGo').textContent = 'Рисую…';
-    el('fillBar').style.display = 'block';
-
-    function step() {
-      if (i >= FILL_LIST.length) {
-        el('fillGo').disabled = false; el('fillGo').textContent = 'Дорисовать картинки';
-        el('fillBarFill').style.width = '100%';
-        say('fill', 'Готово: картинок добавлено ' + done + (failed ? ', не получилось ' + failed : '') + '.', 'ok');
-        refreshBalance();
-        return;
-      }
-      var sl = FILL_LIST[i];
-      el('fillBarFill').style.width = Math.round(i / FILL_LIST.length * 100) + '%';
-      say('fill', 'Слайд ' + sl.num + ' (' + (i + 1) + ' из ' + FILL_LIST.length + '): придумываю картинку…');
-
-      google.script.run
-        .withSuccessHandler(function (res) {
-          say('fill', 'Слайд ' + sl.num + ' (' + (i + 1) + ' из ' + FILL_LIST.length + '): рисую…');
-          generateImage({
-            model: modelId,
-            prompt: res.prompt,
-            aspectRatio: bestAspect(model, targetRatio(placement)) || DEFAULTS.aspect,
-            resolution: DEFAULTS.resolution,
-            styleId: ACTIVE_STYLE_ID,
-            maxRefs: (model && model.maxRefs) || 1
-          },
-          null,
-          function (url) {
-            google.script.run
-              .withSuccessHandler(function () { done++; i++; step(); })
-              .withFailureHandler(function () { failed++; i++; step(); })
-              .uiInsertImage(url, { slideId: sl.slideId, placement: placement });
-          },
-          function () { failed++; i++; step(); });
-        })
-        .withFailureHandler(function () { failed++; i++; step(); })
-        .uiEnhancePrompt('Иллюстрация к слайду презентации со следующим текстом:\n' + sl.text, ACTIVE_STYLE_ID);
-    }
-    step();
-  };
-
 
   // ---------- вкладка «Чат»: команды к презентации словами ----------
   var CHAT_HISTORY = [];
