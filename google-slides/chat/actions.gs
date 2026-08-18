@@ -69,7 +69,7 @@ function slidesAddCornerText(text, which, corner, fontSize, color) {
     var box = slide.insertTextBox(body + CHAT_TAG, pos.x, pos.y, w, h);
     var style = box.getText().getTextStyle();
     style.setFontSize(size);
-    style.setForegroundColor(color && /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#7a7a8c');
+    style.setForegroundColor(color && /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#5f6368');
     try {
       box.getText().getParagraphs().forEach(function (p) {
         p.getRange().getParagraphStyle().setParagraphAlignment(align);

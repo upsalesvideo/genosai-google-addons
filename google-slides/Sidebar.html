@@ -3,7 +3,7 @@
 <head>
   <base target="_top">
   <style>
-    :root { --accent: #6c3bff; --line: #e3e3ec; --muted: #6b7280; --bg: #f7f7fb; }
+    :root { --accent: #1a73e8; --line: #e3e3ec; --muted: #6b7280; --bg: #f7f7fb; }
     body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #202124; margin: 0; padding: 10px 12px 24px; }
     .muted { color: var(--muted); font-size: 11px; }
     .hide { display: none !important; }
@@ -15,7 +15,7 @@
     .tabs { display: flex; gap: 2px; background: var(--bg); border-radius: 8px; padding: 3px; margin: 10px 0 4px; }
     .tabs button { flex: 1; padding: 5px 3px; border: 2px solid transparent; border-radius: 6px;
       background: transparent; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; margin: 0; }
-    /* активная вкладка обведена фиолетовым — видно, где ты находишься */
+    /* активная вкладка обведена синим — видно, где ты находишься */
     .tabs button.on { background: #fff; color: var(--accent); font-weight: 700; border-color: var(--accent); }
     .pane { display: none; }
     .pane.on { display: block; }
@@ -42,9 +42,9 @@
       padding: 9px 12px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; margin-top: 10px;
     }
     button.act { border: 0; background: var(--accent); color: #fff; }
-    button.act:disabled { background: #c3c0d6; cursor: default; }
+    button.act:disabled { background: #a8c7f0; cursor: default; }
     button.sec, .filebtn { border: 1px solid var(--accent); background: #fff; color: var(--accent); font-weight: 500; }
-    .filebtn:hover, button.sec:hover { background: #f5f2ff; }
+    .filebtn:hover, button.sec:hover { background: #e8f0fe; }
     .links { margin-top: 10px; font-size: 11px; }
     .links a { color: var(--accent); cursor: pointer; margin-right: 10px; }
 
@@ -72,11 +72,11 @@
       padding: 4px 6px; font-size: 11px; line-height: 1.25; min-height: 2.9em; }
     .card.add { border-style: dashed; display: flex; flex-direction: column; align-items: center;
       justify-content: center; color: var(--accent); }
-    .card.add:hover { background: #f5f2ff; }
+    .card.add:hover { background: #e8f0fe; }
     .card .plus { font-size: 30px; line-height: 1; margin-top: 14px; }
     .card.add .nm { min-height: 2.2em; }
     .card .none { display: flex; align-items: center; justify-content: center; aspect-ratio: 16/9;
-      background: repeating-linear-gradient(45deg, #f0eefc, #f0eefc 6px, #fff 6px, #fff 12px); color: var(--muted); font-size: 11px; }
+      background: repeating-linear-gradient(45deg, #e8f0fe, #e8f0fe 6px, #fff 6px, #fff 12px); color: var(--muted); font-size: 11px; }
 
     .stnow { display: flex; align-items: center; gap: 8px; background: var(--bg); border-radius: 8px; padding: 6px; margin-top: 8px; cursor: pointer; }
     .stnow img { width: 52px; height: 30px; object-fit: cover; border-radius: 4px; }
@@ -97,7 +97,7 @@
 
     .chatlog { max-height: 300px; overflow-y: auto; margin-top: 10px; padding-right: 2px; }
     .msg { padding: 7px 9px; border-radius: 9px; margin-top: 6px; font-size: 12px; line-height: 1.35; white-space: pre-wrap; }
-    .msg.u { background: #efeaff; }
+    .msg.u { background: #e8f0fe; }
     .msg.a { background: var(--bg); }
     .msg.act { background: #e8f5ec; font-size: 11px; color: #1b5e35; }
     .msg.er { background: #fce8e6; color: #a4241c; }
