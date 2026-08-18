@@ -15,9 +15,10 @@
     .icon:hover { border-color: var(--accent); }
 
     .tabs { display: flex; gap: 2px; background: var(--bg); border-radius: 8px; padding: 3px; margin: 10px 0 4px; }
-    .tabs button { flex: 1; padding: 6px 4px; border: 0; border-radius: 6px; background: transparent;
-      font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; margin: 0; }
-    .tabs button.on { background: #fff; color: #202124; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+    .tabs button { flex: 1; padding: 5px 3px; border: 2px solid transparent; border-radius: 6px;
+      background: transparent; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; margin: 0; }
+    /* активная вкладка обведена фиолетовым — видно, где ты находишься */
+    .tabs button.on { background: #fff; color: var(--accent); font-weight: 700; border-color: var(--accent); }
     .pane { display: none; }
     .pane.on { display: block; }
 
@@ -154,10 +155,10 @@
 
   <div id="main" class="hide">
     <div class="tabs">
-      <button data-tab="chat">Чат</button>
-      <button data-tab="image" class="on">Картинка</button>
+      <button data-tab="image" class="on">Слайд</button>
       <button data-tab="style">Стиль</button>
       <button data-tab="deck">Презентация</button>
+      <button data-tab="chat">Чат</button>
     </div>
 
     <!-- ================= ЧАТ ================= -->

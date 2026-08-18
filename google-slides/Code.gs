@@ -9,12 +9,29 @@ var SIDEBAR_TITLE = '🤖 AI Agent GenosAI';
 function onOpen(e) {
   SlidesApp.getUi()
     .createMenu('🤖 AI Agent GenosAI')
-    .addItem('Картинка на слайд…', 'showImageSidebar')
-    .addItem('Стиль презентации…', 'showStyleSidebar')
-    .addItem('Собрать презентацию…', 'showDeckSidebar')
+    .addItem('Запустить агента', 'showGenosaiSidebar')
     .addSeparator()
     .addItem('Убрать все картинки из презентации…', 'menuStripImages')
+    .addItem('Удалить все слайды…', 'menuClearDeck')
     .addToUi();
+}
+
+/** Очистить презентацию под ноль: остаётся один пустой слайд. */
+function menuClearDeck() {
+  var ui = SlidesApp.getUi();
+  var count = SlidesApp.getActivePresentation().getSlides().length;
+  if (count <= 1) {
+    ui.alert('AI Agent GenosAI', 'Удалять нечего: в презентации один слайд.', ui.ButtonSet.OK);
+    return;
+  }
+  var answer = ui.alert('AI Agent GenosAI',
+    'Удалить ВСЕ слайды? Сейчас их ' + count + ', останется один пустой. ' +
+    'Вернуть можно только откатом версии файла (Файл → История версий).',
+    ui.ButtonSet.YES_NO);
+  if (answer !== ui.Button.YES) return;
+
+  var removed = slidesDeleteAll();
+  ui.alert('AI Agent GenosAI', 'Удалено слайдов: ' + removed + '.', ui.ButtonSet.OK);
 }
 
 /** Снять все картинки с презентации — чтобы перерисовать её заново. */

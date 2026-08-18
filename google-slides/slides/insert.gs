@@ -198,6 +198,20 @@ function slidesCollectImages_(elements) {
   return found;
 }
 
+/** Удалить все слайды, оставив один пустой. → сколько удалено */
+function slidesDeleteAll() {
+  var pres = SlidesApp.getActivePresentation();
+  var old = pres.getSlides();
+  if (old.length <= 1) return 0;
+
+  pres.appendSlide(SlidesApp.PredefinedLayout.BLANK);
+  var removed = 0;
+  old.forEach(function (slide) {
+    try { slide.remove(); removed++; } catch (e) { /* уже удалён */ }
+  });
+  return removed;
+}
+
 /**
  * Опись презентации для массовой дорисовки: у каждого слайда — текст и есть ли уже картинка.
  * → [{slideId, num, text, hasImage}]

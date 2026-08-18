@@ -8,9 +8,7 @@ var SIDEBAR_TITLE = '🤖 AI Agent GenosAI';
 function onOpen(e) {
   DocumentApp.getUi()
     .createMenu('🤖 AI Agent GenosAI')
-    .addItem('Картинка…', 'showImageSidebar')
-    .addItem('Текст ИИ…', 'showTextSidebar')
-    .addItem('Шаблоны…', 'showTemplatesSidebar')
+    .addItem('Запустить агента', 'showGenosaiSidebar')
     .addToUi();
 }
 
