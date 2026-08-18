@@ -13,7 +13,17 @@ function onOpen(e) {
     .addSeparator()
     .addItem('Убрать все картинки из презентации…', 'menuStripImages')
     .addItem('Удалить все слайды…', 'menuClearDeck')
+    .addSeparator()
+    .addItem('Справка', 'showHelp')
     .addToUi();
+}
+
+/** Подробная справка в большом окне: ключ, вкладки, примеры, цены. */
+function showHelp() {
+  var html = HtmlService.createHtmlOutputFromFile('Help')
+    .setWidth(1000)
+    .setHeight(700);
+  SlidesApp.getUi().showModalDialog(html, 'Справка — AI Agent GenosAI');
 }
 
 /** Очистить презентацию под ноль: остаётся один пустой слайд. */
