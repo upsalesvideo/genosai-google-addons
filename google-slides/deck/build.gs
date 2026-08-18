@@ -27,27 +27,45 @@ function deckCreateCanvases(specs) {
 
 /**
  * Комментарий к презентации со сценарием слайда.
- * Комментарии живут в Drive, а не в SlidesApp, поэтому идём в Drive API
- * токеном самого скрипта. Не получилось — честно возвращаем причину,
- * и сайдбар положит текст в заметки докладчика.
+ *
+ * Идём через встроенный сервис Drive, а не через REST: у скрипта свой облачный
+ * проект, в котором Drive API не включён, и прямой вызов возвращал
+ * «Google Drive API has not been used in project … before or it is disabled».
+ * Встроенный сервис Apps Script включает нужный API сам.
+ *
+ * Привязать комментарий к конкретному слайду Google не даёт, поэтому номер
+ * слайда пишем первой строкой самого комментария.
  */
 function deckAddComment(slideNumber, title, speak) {
-  var text = 'Слайд ' + slideNumber + (title ? ' — ' + title : '') + '\n\n' + String(speak || '');
+  var head = slideNumber
+    ? 'Слайд ' + slideNumber + (title ? ' — ' + title : '')
+    : (title || 'Проверка связи');
+  var text = head + '\n\n' + String(speak || '');
   var fileId = SlidesApp.getActivePresentation().getId();
 
-  var res = UrlFetchApp.fetch(
-    'https://www.googleapis.com/drive/v3/files/' + fileId + '/comments?fields=id',
-    {
-      method: 'post',
-      contentType: 'application/json',
-      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
-      payload: JSON.stringify({ content: text }),
-      muteHttpExceptions: true
-    });
-
-  var code = res.getResponseCode();
-  if (code >= 200 && code < 300) return { ok: true };
-  return { ok: false, error: 'Drive API ' + code + ': ' + res.getContentText().slice(0, 160) };
+  try {
+    Drive.Comments.create({ content: text }, fileId, { fields: 'id' });
+    return { ok: true };
+  } catch (e) {
+    var message = (e && e.message) || String(e);
+    // если встроенного сервиса нет под рукой — пробуем прямой REST как запасной путь
+    try {
+      var res = UrlFetchApp.fetch(
+        'https://www.googleapis.com/drive/v3/files/' + fileId + '/comments?fields=id',
+        {
+          method: 'post',
+          contentType: 'application/json',
+          headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+          payload: JSON.stringify({ content: text }),
+          muteHttpExceptions: true
+        });
+      var code = res.getResponseCode();
+      if (code >= 200 && code < 300) return { ok: true };
+      return { ok: false, error: 'Drive ' + code + ': ' + res.getContentText().slice(0, 200) };
+    } catch (e2) {
+      return { ok: false, error: message };
+    }
+  }
 }
 
 /** Запасной путь: сценарий в заметки докладчика. */
