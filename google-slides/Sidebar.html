@@ -95,12 +95,28 @@
     .hist .tx { flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hist .ins { color: var(--accent); cursor: pointer; font-size: 11px; white-space: nowrap; }
 
-    .chatlog { max-height: 300px; overflow-y: auto; margin-top: 10px; padding-right: 2px; }
-    .msg { padding: 7px 9px; border-radius: 9px; margin-top: 6px; font-size: 12px; line-height: 1.35; white-space: pre-wrap; }
-    .msg.u { background: #e8f0fe; }
-    .msg.a { background: var(--bg); }
-    .msg.act { background: #e8f5ec; font-size: 11px; color: #1b5e35; }
-    .msg.er { background: #fce8e6; color: #a4241c; }
+    /* вкладка «Чат»: сверху модель, посередине лента, снизу поле ввода */
+    #pane-chat.on { display: flex; flex-direction: column; height: calc(100vh - 150px); min-height: 340px; }
+    .chatbar { display: flex; gap: 8px; align-items: center; }
+    .chatbar select { flex: 1; min-width: 0; }
+    .chatbar a { color: var(--accent); cursor: pointer; font-size: 11px; white-space: nowrap; }
+
+    .chatlog { flex: 1; min-height: 150px; overflow-y: auto; margin-top: 10px; padding: 8px;
+      background: var(--bg); border: 1px solid var(--line); border-radius: 10px;
+      display: flex; flex-direction: column; gap: 6px; }
+    .chatlog .empty { margin: auto; padding: 0 8px; text-align: center; color: var(--muted);
+      font-size: 11px; line-height: 1.5; }
+    .msg { max-width: 88%; padding: 7px 10px; border-radius: 12px; font-size: 12px;
+      line-height: 1.35; white-space: pre-wrap; overflow-wrap: break-word; }
+    .msg.u { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+    .msg.a { align-self: flex-start; background: #fff; border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+    .msg.act { align-self: center; max-width: 96%; background: #e8f5ec; color: #1b5e35; font-size: 11px; border-radius: 8px; }
+    .msg.er { align-self: flex-start; background: #fce8e6; color: #a4241c; }
+    .msg.wait { align-self: flex-start; background: #fff; border: 1px solid var(--line); color: var(--muted); }
+
+    .chatbox { margin-top: 8px; }
+    .chatbox textarea { min-height: 56px; }
+    .chatbox button.act { margin-top: 8px; }
     .tabs button { font-size: 11px; }
 
     .jobs { margin-top: 10px; }
@@ -163,23 +179,18 @@
 
     <!-- ================= ЧАТ ================= -->
     <div class="pane" id="pane-chat">
-      <label for="cModel">Модель</label>
-      <select id="cModel"></select>
+      <div class="chatbar">
+        <select id="cModel" title="Модель, которая отвечает и правит презентацию"></select>
+        <a id="cClear" title="Модель забудет всё, о чём говорили">Очистить</a>
+      </div>
 
       <div class="chatlog" id="chatLog"></div>
 
-      <label for="cInput">Что сделать с презентацией</label>
-      <textarea id="cInput" style="min-height:70px"
-        placeholder="Например: на каждый слайд в правый верхний угол поставь genosai.io"></textarea>
-
-      <div class="row btns">
-        <div><button class="sec mini" id="cMic">🎤 Голосом</button></div>
-        <div><button class="sec mini" id="cNotes">Из заметок слайда</button></div>
+      <div class="chatbox">
+        <textarea id="cInput" placeholder="Введите запрос"></textarea>
+        <button class="act" id="cSend">Отправить</button>
       </div>
-
-      <button class="act" id="cSend">Выполнить</button>
       <div class="status" id="st-chat"></div>
-      <div class="links"><a id="cClear">Очистить переписку</a></div>
     </div>
 
     <!-- ================= КАРТИНКА ================= -->
@@ -1731,12 +1742,27 @@
       .uiDeckHistoryClear();
   };
 
-  // ---------- вкладка «Чат»: команды к презентации словами ----------
+  // ---------- вкладка «Чат»: обычная переписка с моделью, которая правит презентацию ----------
   var CHAT_HISTORY = [];
-  var recognizer = null;
+
+  var CHAT_HINT = 'Спросите или дайте команду — модель сама поправит презентацию.' +
+    String.fromCharCode(10) + String.fromCharCode(10) +
+    'Например: «поставь на каждый слайд номер страницы в правом нижнем углу» ' +
+    'или «замени заголовок третьего слайда на короткий».';
+
+  function chatEmpty() {
+    var box = el('chatLog');
+    box.innerHTML = '';
+    var d = document.createElement('div');
+    d.className = 'empty';
+    d.textContent = CHAT_HINT;
+    box.appendChild(d);
+  }
 
   function chatSay(kind, text) {
     var box = el('chatLog');
+    var stub = box.querySelector('.empty');
+    if (stub) box.removeChild(stub);
     var div = document.createElement('div');
     div.className = 'msg ' + kind;
     div.textContent = text;
@@ -1745,31 +1771,38 @@
     return div;
   }
 
-  function chatSend(text) {
-    var msg = String(text || el('cInput').value).trim();
-    if (!msg) { say('chat', 'Напиши или надиктуй команду.', 'err'); return; }
+  function chatBusy(on) {
+    el('cSend').disabled = on;
+    el('cSend').textContent = on ? 'Отправляю…' : 'Отправить';
+    el('cInput').disabled = on;
+  }
+
+  function chatSend() {
+    var msg = String(el('cInput').value).trim();
+    if (!msg) { el('cInput').focus(); return; }
 
     chatSay('u', msg);
     CHAT_HISTORY.push({ role: 'user', content: msg });
     el('cInput').value = '';
-    el('cSend').disabled = true;
-    el('cSend').textContent = 'Выполняю…';
-    say('chat', 'Думаю и правлю презентацию…');
+    chatBusy(true);
+    say('chat', '');
+    var wait = chatSay('wait', 'Думаю…');
 
     google.script.run
       .withSuccessHandler(function (res) {
-        el('cSend').disabled = false;
-        el('cSend').textContent = 'Выполнить';
+        chatBusy(false);
+        if (wait.parentNode) wait.parentNode.removeChild(wait);
         (res.actions || []).forEach(function (a) { chatSay('act', '✓ ' + a); });
         chatSay('a', res.reply);
         CHAT_HISTORY.push({ role: 'assistant', content: res.reply });
         if (CHAT_HISTORY.length > 12) CHAT_HISTORY = CHAT_HISTORY.slice(-12);
-        say('chat', 'Готово. Потрачено ' + res.credits + ' кр.', 'ok');
+        say('chat', 'Потрачено ' + res.credits + ' кр.', 'ok');
         refreshBalance();
+        el('cInput').focus();
       })
       .withFailureHandler(function (err) {
-        el('cSend').disabled = false;
-        el('cSend').textContent = 'Выполнить';
+        chatBusy(false);
+        if (wait.parentNode) wait.parentNode.removeChild(wait);
         var text = (err && err.message) || String(err);
         chatSay('er', text);
         say('chat', text, 'err');
@@ -1779,70 +1812,18 @@
 
   el('cSend').onclick = function () { chatSend(); };
 
+  // Enter отправляет, Shift+Enter — перенос строки: как в любом чате
   el('cInput').onkeydown = function (e) {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) chatSend();
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); }
   };
 
   el('cClear').onclick = function () {
     CHAT_HISTORY = [];
-    el('chatLog').innerHTML = '';
-    say('chat', 'Переписка очищена — модель забыла контекст.');
+    chatEmpty();
+    say('chat', '');
   };
 
-  /** Голос: сначала пробуем распознавание браузера, иначе подсказываем диктовку системы. */
-  el('cMic').onclick = function () {
-    var Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!Rec) {
-      say('chat', 'Браузер не даёт микрофон боковой панели. Нажми Win+H (в Windows) или Fn-Fn (на Mac) ' +
-                  'и диктуй прямо в поле — либо надиктуй в заметки докладчика и жми «Из заметок слайда».', 'err');
-      return;
-    }
-    if (recognizer) { recognizer.stop(); recognizer = null; el('cMic').textContent = '🎤 Голосом'; return; }
-
-    try {
-      recognizer = new Rec();
-      recognizer.lang = 'ru-RU';
-      recognizer.interimResults = true;
-      recognizer.continuous = false;
-      var base = el('cInput').value;
-      recognizer.onresult = function (e) {
-        var text = '';
-        for (var i = 0; i < e.results.length; i++) text += e.results[i][0].transcript;
-        el('cInput').value = (base ? base + ' ' : '') + text;
-      };
-      recognizer.onerror = function (e) {
-        el('cMic').textContent = '🎤 Голосом';
-        recognizer = null;
-        say('chat', 'Микрофон недоступен (' + e.error + '). Диктуй через Win+H прямо в поле ' +
-                    'или надиктуй в заметки докладчика и нажми «Из заметок слайда».', 'err');
-      };
-      recognizer.onend = function () {
-        el('cMic').textContent = '🎤 Голосом';
-        recognizer = null;
-        say('chat', 'Записал. Проверь текст и жми «Выполнить».');
-      };
-      recognizer.start();
-      el('cMic').textContent = '● Слушаю…';
-      say('chat', 'Говори — текст появится в поле.');
-    } catch (e) {
-      recognizer = null;
-      el('cMic').textContent = '🎤 Голосом';
-      say('chat', 'Не получилось включить микрофон: ' + ((e && e.message) || e), 'err');
-    }
-  };
-
-  /** Заметки докладчика — надёжный способ надиктовать: голосовой ввод там даёт сам Google. */
-  el('cNotes').onclick = function () {
-    say('chat', 'Читаю заметки текущего слайда…');
-    google.script.run
-      .withSuccessHandler(function (text) {
-        if (!text) { say('chat', 'В заметках этого слайда пусто. Вид → Заметки докладчика, там же есть голосовой ввод.', 'err'); return; }
-        el('cInput').value = text;
-        say('chat', 'Забрал текст из заметок. Проверь и жми «Выполнить».', 'ok');
-      })
-      .withFailureHandler(function (err) { say('chat', (err && err.message) || String(err), 'err'); })
-      .uiSlideNotes();
-  };
+  chatEmpty();
 
   // ---------- запуск ----------
   function init(state) {
