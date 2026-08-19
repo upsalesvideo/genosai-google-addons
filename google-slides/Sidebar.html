@@ -4,17 +4,17 @@
   <base target="_top">
   <style>
     :root { --accent: #1a73e8; --line: #e3e3ec; --muted: #6b7280; --bg: #f7f7fb; }
-    body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #202124; margin: 0; padding: 10px 12px 24px; }
+    body { font-family: Roboto, Arial, sans-serif; font-size: 13px; color: #202124; margin: 0; padding: 10px 4px 24px; }
     .muted { color: var(--muted); font-size: 11px; }
     .hide { display: none !important; }
 
-    .tabs .icon { flex: none; width: 30px; border: 2px solid transparent; border-radius: 6px;
-      background: transparent; cursor: pointer; font-size: 14px; line-height: 1; padding: 0; color: var(--muted); }
+    .tabs .icon { flex: none; width: 34px; border: 2px solid transparent; border-radius: 6px;
+      background: transparent; cursor: pointer; font-size: 17px; line-height: 1; padding: 0; color: var(--muted); }
     .tabs .icon:hover { background: #fff; color: var(--accent); }
 
     .tabs { display: flex; gap: 2px; background: var(--bg); border-radius: 8px; padding: 3px; margin: 10px 0 4px; }
-    .tabs button { flex: 1; padding: 5px 3px; border: 2px solid transparent; border-radius: 6px;
-      background: transparent; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; margin: 0; }
+    .tabs button { flex: 1; padding: 9px 3px; border: 2px solid transparent; border-radius: 6px;
+      background: transparent; font: inherit; color: var(--muted); cursor: pointer; margin: 0; }
     /* активная вкладка обведена синим — видно, где ты находишься */
     .tabs button.on { background: #fff; color: var(--accent); font-weight: 700; border-color: var(--accent); }
     .pane { display: none; }
@@ -117,7 +117,7 @@
     .chatbox { margin-top: 8px; }
     .chatbox textarea { min-height: 56px; }
     .chatbox button.act { margin-top: 8px; }
-    .tabs button { font-size: 11px; }
+    .tabs button { font-size: 13px; }
 
     .jobs { margin-top: 10px; }
     .job { display: flex; gap: 6px; align-items: baseline; font-size: 11px; padding: 4px 6px;
@@ -203,7 +203,7 @@
       <label for="prompt">Что нарисовать</label>
       <textarea id="prompt" placeholder="Например: команда обсуждает график продаж у большого окна"></textarea>
       <div class="row btns">
-        <div><button class="sec mini" id="enhance">✨ Улучшить промпт</button></div>
+        <div><button class="sec mini" id="enhance">Улучшить промпт</button></div>
         <div><button class="sec mini" id="fromSlide">По тексту слайда</button></div>
       </div>
 
@@ -236,7 +236,6 @@
           <select id="res"></select>
         </div>
       </div>
-      <div class="muted" id="arHint"></div>
 
       <label for="bandTitle">Заголовок плашкой</label>
       <input type="text" id="bandTitle" placeholder="только для раскладки «весь слайд»">
@@ -587,7 +586,6 @@
     if (!m) return;
     var want = bestAspect(m, targetRatio(el('placement').value));
     fillSelect(el('ar'), m.aspectRatios, want, 'по умолчанию');
-    el('arHint').textContent = want ? '— авто: ' + want : '';
   }
 
   // ---------- референсы ----------
@@ -1864,7 +1862,6 @@
     var m = modelById(el('model').value);
     if (m && m.aspectRatios.indexOf(DEFAULTS.aspect) >= 0) {
       el('ar').value = DEFAULTS.aspect;
-      el('arHint').textContent = '— по умолчанию ' + DEFAULTS.aspect;
     }
     if (m && m.resolutions.indexOf(DEFAULTS.resolution) >= 0) el('res').value = DEFAULTS.resolution;
 
